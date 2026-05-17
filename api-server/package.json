@@ -1,0 +1,35 @@
+{
+  "name": "bistro-api-server",
+  "version": "1.0.0",
+  "description": "The Intelligent Bistro — Express API server with LLM tool-calling AI engine",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.105.4",
+    "@types/better-sqlite3": "^7.6.13",
+    "bcryptjs": "^2.4.3",
+    "cors": "2.8.5",
+    "dotenv": "16.4.7",
+    "express": "4.21.2",
+    "express-rate-limit": "7.5.0",
+    "helmet": "8.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "openai": "4.103.0",
+    "sql.js": "^1.14.1",
+    "zod": "3.24.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "2.8.17",
+    "@types/express": "5.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "22.15.21",
+    "tsx": "4.19.4",
+    "typescript": "5.9.2"
+  }
+}
