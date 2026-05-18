@@ -5,11 +5,11 @@
  */
 
 import type {
-    CustomizationGroup,
-    MenuCategory,
-    MenuItem,
-    PromoCode,
-    Restaurant,
+  CustomizationGroup,
+  MenuCategory,
+  MenuItem,
+  PromoCode,
+  Restaurant,
 } from "../../../shared/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1130,6 +1130,94 @@ const DRINK_ITEMS: MenuItem[] = [
     isAvailable: true,
     rating: 4.7,
     reviewCount: 678,
+  },
+  {
+    id: "drink-05",
+    name: "Still Water (Large)",
+    description:
+      "Chilled still mineral water, large 500ml bottle. Pure, refreshing, and always available.",
+    basePrice: 249,
+    imageUrl: "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=800",
+    categoryId: "drinks",
+    dietaryTags: ["vegan", "gluten-free", "dairy-free"],
+    customizationGroups: [],
+    calories: 0,
+    isAvailable: true,
+    rating: 4.6,
+    reviewCount: 890,
+  },
+  {
+    id: "drink-06",
+    name: "Cold Brew Coffee",
+    description:
+      "Smooth 24-hour cold brew concentrate over ice. Served black or with your choice of milk.",
+    basePrice: 549,
+    imageUrl: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800",
+    categoryId: "drinks",
+    dietaryTags: ["vegan", "gluten-free"],
+    customizationGroups: [
+      {
+        id: "cold-brew-milk",
+        label: "Add Milk",
+        type: "single",
+        minSelections: 1,
+        maxSelections: 1,
+        options: [
+          { id: "cb-black", label: "Black", priceDelta: 0, isDefault: true },
+          { id: "cb-oat", label: "Oat Milk", priceDelta: 50 },
+          { id: "cb-almond", label: "Almond Milk", priceDelta: 50 },
+          { id: "cb-whole", label: "Whole Milk", priceDelta: 50 },
+        ],
+      },
+    ],
+    calories: 10,
+    isAvailable: true,
+    rating: 4.8,
+    reviewCount: 1102,
+  },
+  {
+    id: "drink-07",
+    name: "Energy Boost",
+    description:
+      "Natural energy drink with green tea extract, B-vitamins, and electrolytes. Zero sugar. Choose your flavor.",
+    basePrice: 449,
+    imageUrl: "https://images.unsplash.com/photo-1622543925917-763c34d1a86e?w=800",
+    categoryId: "drinks",
+    dietaryTags: ["vegan", "gluten-free", "dairy-free"],
+    customizationGroups: [
+      {
+        id: "energy-flavor",
+        label: "Choose Flavor",
+        type: "single",
+        minSelections: 1,
+        maxSelections: 1,
+        options: [
+          { id: "ef-citrus", label: "Citrus Burst", priceDelta: 0, isDefault: true },
+          { id: "ef-berry", label: "Mixed Berry", priceDelta: 0 },
+          { id: "ef-tropical", label: "Tropical Punch", priceDelta: 0 },
+          { id: "ef-watermelon", label: "Watermelon Mint", priceDelta: 0 },
+        ],
+      },
+    ],
+    calories: 15,
+    isAvailable: true,
+    rating: 4.5,
+    reviewCount: 432,
+  },
+  {
+    id: "drink-08",
+    name: "Mango Lassi",
+    description:
+      "Creamy blend of fresh Alphonso mango, yogurt, cardamom, and a hint of rose water. Chilled and refreshing.",
+    basePrice: 599,
+    imageUrl: "https://images.unsplash.com/photo-1553361371-9b22f78e8b1d?w=800",
+    categoryId: "drinks",
+    dietaryTags: ["vegetarian", "gluten-free"],
+    customizationGroups: [DRINK_SIZE_GROUP],
+    calories: 220,
+    isAvailable: true,
+    rating: 4.7,
+    reviewCount: 765,
   },
 ];
 

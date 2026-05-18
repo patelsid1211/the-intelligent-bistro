@@ -46,14 +46,25 @@ import { validateBody } from "./middleware/validate.js";
 
 // Auth
 import {
+    addAddress,
+    addFavourite,
+    AddressSchema,
+    deleteAddress,
     forgotPassword, ForgotPasswordSchema,
+    getAddresses,
+    getFavourites,
     getMe,
+    getNotificationPrefs,
     login, LoginSchema,
     logout,
+    NotificationPrefsSchema,
     RefreshSchema,
     refreshToken,
+    removeFavourite,
     resetPassword, ResetPasswordSchema,
     signup, SignupSchema,
+    updateNotificationPrefs,
+    updateProfile, UpdateProfileSchema,
 } from "./controllers/authController.js";
 
 // Products
@@ -124,6 +135,21 @@ app.get( "/api/auth/me",              asyncHandler(getMe));
 app.post("/api/auth/refresh",         validateBody(RefreshSchema),         asyncHandler(refreshToken));
 app.post("/api/auth/forgot-password", validateBody(ForgotPasswordSchema),  asyncHandler(forgotPassword));
 app.post("/api/auth/reset-password",  validateBody(ResetPasswordSchema),   asyncHandler(resetPassword));
+app.patch("/api/auth/profile",        validateBody(UpdateProfileSchema),   asyncHandler(updateProfile));
+
+// Addresses
+app.get(   "/api/user/addresses",     asyncHandler(getAddresses));
+app.post(  "/api/user/addresses",     validateBody(AddressSchema), asyncHandler(addAddress));
+app.delete("/api/user/addresses/:id", asyncHandler(deleteAddress));
+
+// Favourites
+app.get(   "/api/user/favourites",              asyncHandler(getFavourites));
+app.post(  "/api/user/favourites",              asyncHandler(addFavourite));
+app.delete("/api/user/favourites/:menuItemId",  asyncHandler(removeFavourite));
+
+// Notification preferences
+app.get(  "/api/user/notifications", asyncHandler(getNotificationPrefs));
+app.patch("/api/user/notifications", validateBody(NotificationPrefsSchema), asyncHandler(updateNotificationPrefs));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCT / CATEGORY ROUTES

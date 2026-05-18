@@ -5,7 +5,7 @@
  */
 
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList, KeyboardAvoidingView,
@@ -14,7 +14,7 @@ import {
   ScrollView,
   StyleSheet,
   Text, TextInput, TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -25,10 +25,10 @@ import { apiForgotPassword, apiLogin, apiSignup, saveSession } from "@/store/aut
 import type { AuthMethod, CountryCode } from "@shared/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COUNTRY CODES
+// COUNTRY CODES — fetched from restcountries.com, with fallback
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COUNTRY_CODES: CountryCode[] = [
+const FALLBACK_COUNTRIES: CountryCode[] = [
   { name: "United States",  code: "US", dialCode: "+1",   flag: "🇺🇸", phoneMask: "(###) ###-####" },
   { name: "United Kingdom", code: "GB", dialCode: "+44",  flag: "🇬🇧", phoneMask: "#### ### ####" },
   { name: "Canada",         code: "CA", dialCode: "+1",   flag: "🇨🇦", phoneMask: "(###) ###-####" },
@@ -50,6 +50,54 @@ const COUNTRY_CODES: CountryCode[] = [
   { name: "China",          code: "CN", dialCode: "+86",  flag: "🇨🇳", phoneMask: "### #### ####" },
   { name: "Pakistan",       code: "PK", dialCode: "+92",  flag: "🇵🇰", phoneMask: "### #######" },
 ];
+
+/** Convert ISO 3166-1 alpha-2 code to flag emoji */
+function codeToFlag(code: string): string {
+  return code
+    .toUpperCase()
+    .split("")
+    .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
+    .join("");
+}
+
+/** Fetch all countries from restcountries.com and map to CountryCode[] */
+async function fetchAllCountries(): Promise<CountryCode[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      "https://restcountries.com/v3.1/all?fields=name,idd,cca2",
+      { signal: controller.signal }
+    );
+    if (!res.ok) throw new Error("Failed to fetch countries");
+    const data: Array<{
+      name: { common: string };
+      idd: { root?: string; suffixes?: string[] };
+      cca2: string;
+    }> = await res.json();
+
+    return data
+      .filter((c) => c.idd?.root)
+      .map((c) => {
+        const root = c.idd.root!;
+        const suffixes = c.idd.suffixes ?? [];
+        // Use root+suffix only when there is exactly ONE suffix (e.g. India: +9 + 1 = +91)
+        // For countries with many suffixes (US area codes), just use the root (+1)
+        const dialCode = suffixes.length === 1 ? `${root}${suffixes[0]}` : root;
+        return {
+          name: c.name.common,
+          code: c.cca2,
+          dialCode,
+          flag: codeToFlag(c.cca2),
+          phoneMask: "### ### ####",
+        } as CountryCode;
+      })
+      .filter((c) => c.dialCode.length >= 2) // remove entries with just "+"
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 type Screen = "login" | "signup" | "forgot";
 
@@ -121,9 +169,28 @@ function CountryPicker({ visible, selected, onSelect, onClose }: {
   onSelect: (c: CountryCode) => void; onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const filtered = COUNTRY_CODES.filter(
-    (c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.dialCode.includes(search)
+  const [countries, setCountries] = useState<CountryCode[]>(FALLBACK_COUNTRIES);
+  const [loading, setLoading] = useState(false);
+  const hasFetched = useRef(false);
+
+  // Fetch all countries when picker opens for the first time
+  useEffect(() => {
+    if (!visible || hasFetched.current) return;
+    hasFetched.current = true;
+    setLoading(true);
+    fetchAllCountries()
+      .then((all) => { if (all.length > 0) setCountries(all); })
+      .catch(() => { /* keep fallback */ })
+      .finally(() => setLoading(false));
+  }, [visible]);
+
+  const filtered = countries.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.dialCode.includes(search) ||
+      c.code.toLowerCase().includes(search.toLowerCase())
   );
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={s.pickerWrap}>
@@ -134,15 +201,26 @@ function CountryPicker({ visible, selected, onSelect, onClose }: {
           </TouchableOpacity>
         </View>
         <View style={s.pickerSearchWrap}>
-          <TextInput style={s.pickerSearch} placeholder="Search country or dial code..."
+          <TextInput style={s.pickerSearch} placeholder="Search country, code or dial code..."
             placeholderTextColor={Colors.neutral.placeholder}
             value={search} onChangeText={setSearch} autoFocus clearButtonMode="while-editing" />
         </View>
-        <FlatList data={filtered} keyExtractor={(i) => i.code}
+        {loading && (
+          <View style={s.pickerLoading}>
+            <ActivityIndicator color={Colors.brand.primary} />
+            <Text style={s.pickerLoadingText}>Loading all countries...</Text>
+          </View>
+        )}
+        <FlatList
+          data={filtered}
+          keyExtractor={(i) => i.code}
           renderItem={({ item }) => (
-            <TouchableOpacity style={[s.countryRow, item.code === selected.code && s.countryRowSel]}
+            <TouchableOpacity
+              style={[s.countryRow, item.code === selected.code && s.countryRowSel]}
               onPress={() => { onSelect(item); onClose(); }}
-              accessibilityRole="button" accessibilityLabel={`${item.name} ${item.dialCode}`}>
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name} ${item.dialCode}`}
+            >
               <Text style={s.flag}>{item.flag}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={s.countryName}>{item.name}</Text>
@@ -153,6 +231,10 @@ function CountryPicker({ visible, selected, onSelect, onClose }: {
           )}
           ItemSeparatorComponent={() => <View style={s.sep} />}
           keyboardShouldPersistTaps="handled"
+          getItemLayout={(_, index) => ({ length: 64, offset: 64 * index, index })}
+          initialNumToRender={20}
+          maxToRenderPerBatch={30}
+          windowSize={10}
         />
       </SafeAreaView>
     </Modal>
@@ -271,7 +353,7 @@ export default function AuthScreen() {
   // Credential fields
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [country, setCountry] = useState<CountryCode>(COUNTRY_CODES[0]);
+  const [country, setCountry] = useState<CountryCode>(FALLBACK_COUNTRIES[0]);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -455,34 +537,35 @@ export default function AuthScreen() {
   // ── RENDER ─────────────────────────────────────────────────────────────────
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={s.root}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
       <StatusBar style="light" />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+
+      {/* Fixed dark header — always visible */}
+      <View style={[s.hero, { paddingTop: insets.top + Spacing.xl }]}>
+        <Text style={s.appName}>
+          {screen === "login" ? "Log In" : screen === "signup" ? "Sign Up" : "Forgot Password"}
+        </Text>
+        <Text style={s.tagline}>
+          {screen === "login"
+            ? "Please sign in to your existing account"
+            : screen === "signup"
+            ? "Please sign up to get started"
+            : "Enter your email to reset your password"}
+        </Text>
+      </View>
+
+      {/* Scrollable white card */}
+      <ScrollView
+        style={s.kavContainer}
+        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + Spacing["3xl"] }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        <ScrollView
-          contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + Spacing["2xl"] }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-
-          {/* ── Dark header ── */}
-          <View style={s.hero}>
-            <Text style={s.appName}>
-              {screen === "login" ? "Log In" : screen === "signup" ? "Sign Up" : "Forgot Password"}
-            </Text>
-            <Text style={s.tagline}>
-              {screen === "login"
-                ? "Please sign in to your existing account"
-                : screen === "signup"
-                ? "Please sign up to get started"
-                : "Please sign in to your existing account"}
-            </Text>
-          </View>
-
           {/* ── White card ── */}
           <View style={s.card}>
 
@@ -547,7 +630,6 @@ export default function AuthScreen() {
                   inputRef={passwordRef} onSubmit={handleLogin} />
               </Field>
 
-              {/* Remember me + Forgot */}
               <View style={s.forgotRow}>
                 <View style={s.rememberRow}>
                   <View style={s.rememberBox} />
@@ -560,7 +642,6 @@ export default function AuthScreen() {
 
               <PrimaryButton label="Log In" onPress={handleLogin} loading={loading} />
 
-              {/* Sign up link */}
               <View style={s.signupRow}>
                 <Text style={s.signupText}>Don't have an account?</Text>
                 <TouchableOpacity onPress={() => switchScreen("signup")}>
@@ -679,42 +760,33 @@ export default function AuthScreen() {
           )}
 
           </View>{/* end card */}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
 
       <CountryPicker visible={showPicker} selected={country}
         onSelect={setCountry} onClose={() => setShowPicker(false)} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // ── Root & scroll ──────────────────────────────────────────────────────────
+  // ── Root (KeyboardAvoidingView) ───────────────────────────────────────────
   root: { flex: 1, backgroundColor: Colors.auth.bg },
+  kavContainer: { flex: 1 },
   scroll: { flexGrow: 1 },
 
-  // ── Dark header section ────────────────────────────────────────────────────
+  // ── Dark header — fixed at top ────────────────────────────────────────────
   hero: {
     alignItems: "center",
-    paddingTop: Spacing["4xl"],
     paddingBottom: Spacing["2xl"],
     paddingHorizontal: Spacing["2xl"],
     gap: Spacing.sm,
   },
-  logoBox: {
-    width: 72,
-    height: 72,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.brand.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.sm,
-  },
-  logoEmoji: { fontSize: 36 },
   appName: {
     fontSize: Typography.size["2xl"],
     fontWeight: Typography.weight.heavy,
@@ -728,7 +800,7 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ── White card container ───────────────────────────────────────────────────
+  // ── White card ────────────────────────────────────────────────────────────
   card: {
     backgroundColor: Colors.neutral.white,
     borderTopLeftRadius: 30,
@@ -736,19 +808,19 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing["2xl"],
     paddingTop: Spacing["2xl"],
     paddingBottom: Spacing["3xl"],
-    flex: 1,
+    minHeight: 400,
   },
 
-  // ── Screen tabs ────────────────────────────────────────────────────────────
+  // ── Screen tabs ───────────────────────────────────────────────────────────
   tabs: {
     flexDirection: "row",
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.neutral.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingBottom: Spacing.md,
     alignItems: "center",
   },
   tabActive: {
@@ -765,7 +837,7 @@ const s = StyleSheet.create({
     fontWeight: Typography.weight.bold,
   },
 
-  // ── Global banners ─────────────────────────────────────────────────────────
+  // ── Global error / success ────────────────────────────────────────────────
   globalError: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -773,78 +845,133 @@ const s = StyleSheet.create({
     backgroundColor: "#FEF2F2",
     borderRadius: Radius.md,
     padding: Spacing.md,
+    marginBottom: Spacing.md,
     borderLeftWidth: 3,
     borderLeftColor: Colors.semantic.error,
-    marginBottom: Spacing.sm,
   },
-  globalErrorIcon: { fontSize: 16, marginTop: 1 },
+  globalErrorIcon: { fontSize: 16 },
   globalErrorText: {
     flex: 1,
     fontSize: Typography.size.sm,
     color: Colors.semantic.error,
     fontWeight: Typography.weight.medium,
-    lineHeight: 18,
   },
   globalSuccess: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: Spacing.sm,
-    backgroundColor: "#F0FDF4",
+    backgroundColor: "#F0FFF4",
     borderRadius: Radius.md,
     padding: Spacing.md,
+    marginBottom: Spacing.md,
     borderLeftWidth: 3,
     borderLeftColor: Colors.semantic.success,
-    marginBottom: Spacing.sm,
   },
-  globalSuccessIcon: { fontSize: 16, marginTop: 1 },
+  globalSuccessIcon: { fontSize: 16 },
   globalSuccessText: {
     flex: 1,
     fontSize: Typography.size.sm,
     color: Colors.semantic.success,
     fontWeight: Typography.weight.medium,
-    lineHeight: 18,
   },
 
-  // ── Form ───────────────────────────────────────────────────────────────────
-  form: { gap: Spacing.lg },
+  // ── Form ──────────────────────────────────────────────────────────────────
+  form: { gap: Spacing.md },
+
+  // ── Field group ───────────────────────────────────────────────────────────
   fieldGroup: { gap: Spacing.xs },
   fieldLabel: {
     fontSize: Typography.size.xs,
     fontWeight: Typography.weight.bold,
     color: Colors.neutral.secondary,
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
-  fieldError: { fontSize: Typography.size.xs, color: Colors.semantic.error, marginTop: 2 },
+  fieldError: {
+    fontSize: Typography.size.xs,
+    color: Colors.semantic.error,
+    marginTop: 2,
+  },
 
-  // ── Input ──────────────────────────────────────────────────────────────────
+  // ── Input ─────────────────────────────────────────────────────────────────
   input: {
-    height: 54,
+    height: 52,
     backgroundColor: Colors.neutral.surface,
     borderRadius: Radius.lg,
     paddingHorizontal: Spacing.base,
     fontSize: Typography.size.base,
     color: Colors.neutral.primary,
-    borderWidth: 0,
+    borderWidth: 1.5,
+    borderColor: Colors.neutral.border,
   },
   inputError: {
-    borderWidth: 1.5,
     borderColor: Colors.semantic.error,
     backgroundColor: "#FEF2F2",
   },
 
-  // ── Method toggle ──────────────────────────────────────────────────────────
+  // ── Password row ──────────────────────────────────────────────────────────
+  pwRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.neutral.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.neutral.border,
+    overflow: "hidden",
+  },
+  pwInput: {
+    flex: 1,
+    height: 52,
+    paddingHorizontal: Spacing.base,
+    fontSize: Typography.size.base,
+    color: Colors.neutral.primary,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+  },
+  pwToggle: {
+    paddingHorizontal: Spacing.md,
+    height: 52,
+    justifyContent: "center",
+  },
+  pwToggleText: {
+    fontSize: Typography.size.sm,
+    color: Colors.brand.primary,
+    fontWeight: Typography.weight.semibold,
+  },
+
+  // ── Password strength ─────────────────────────────────────────────────────
+  strengthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  strengthBar: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+  },
+  strengthLabel: {
+    fontSize: Typography.size.xs,
+    fontWeight: Typography.weight.semibold,
+    minWidth: 50,
+    textAlign: "right",
+  },
+
+  // ── Method toggle ─────────────────────────────────────────────────────────
   methodToggle: {
     flexDirection: "row",
     backgroundColor: Colors.neutral.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     padding: 4,
+    gap: 4,
   },
   methodBtn: {
     flex: 1,
-    paddingVertical: Spacing.sm,
+    height: 40,
+    borderRadius: Radius.lg,
     alignItems: "center",
-    borderRadius: Radius.md,
+    justifyContent: "center",
   },
   methodBtnActive: {
     backgroundColor: Colors.neutral.white,
@@ -864,76 +991,58 @@ const s = StyleSheet.create({
     fontWeight: Typography.weight.bold,
   },
 
-  // ── Phone ──────────────────────────────────────────────────────────────────
-  phoneRow: { flexDirection: "row", gap: Spacing.sm },
+  // ── Phone input ───────────────────────────────────────────────────────────
+  phoneRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    alignItems: "center",
+  },
   countryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    height: 54,
+    gap: 4,
+    height: 52,
+    paddingHorizontal: Spacing.md,
     backgroundColor: Colors.neutral.surface,
     borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    gap: Spacing.xs,
+    borderWidth: 1.5,
+    borderColor: Colors.neutral.border,
   },
-  chevron: { fontSize: 11, color: Colors.neutral.secondary },
-
-  // ── Password ───────────────────────────────────────────────────────────────
-  pwRow: { position: "relative" },
-  pwInput: { paddingRight: 72 },
-  pwToggle: {
-    position: "absolute",
-    right: Spacing.base,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-  },
-  pwToggleText: {
-    fontSize: Typography.size.sm,
-    fontWeight: Typography.weight.semibold,
+  chevron: {
+    fontSize: 12,
     color: Colors.neutral.secondary,
   },
 
-  // ── Password strength ──────────────────────────────────────────────────────
-  strengthRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    marginTop: Spacing.xs,
-  },
-  strengthBar: { flex: 1, height: 4, borderRadius: 2 },
-  strengthLabel: {
-    fontSize: Typography.size.xs,
-    fontWeight: Typography.weight.semibold,
-    minWidth: 52,
-    textAlign: "right",
-  },
-
-  // ── Remember me + Forgot row ───────────────────────────────────────────────
+  // ── Forgot / remember row ─────────────────────────────────────────────────
   forgotRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: -Spacing.sm,
   },
-  rememberRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
   rememberBox: {
     width: 18,
     height: 18,
     borderRadius: 4,
     borderWidth: 1.5,
     borderColor: Colors.neutral.divider,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: Colors.neutral.surface,
   },
-  rememberText: { fontSize: Typography.size.sm, color: Colors.neutral.secondary },
-  forgotLink: {},
+  rememberText: {
+    fontSize: Typography.size.sm,
+    color: Colors.neutral.secondary,
+  },
   forgotLinkText: {
     fontSize: Typography.size.sm,
     color: Colors.brand.primary,
     fontWeight: Typography.weight.semibold,
   },
 
-  // ── Primary button ─────────────────────────────────────────────────────────
+  // ── Primary button ────────────────────────────────────────────────────────
   primaryBtn: {
     height: 56,
     backgroundColor: Colors.brand.primary,
@@ -945,72 +1054,79 @@ const s = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 14,
     elevation: 8,
+    marginTop: Spacing.sm,
   },
-  primaryBtnDisabled: { opacity: 0.6 },
+  primaryBtnDisabled: { opacity: 0.55, shadowOpacity: 0 },
   primaryBtnText: {
     fontSize: Typography.size.base,
     fontWeight: Typography.weight.heavy,
     color: Colors.neutral.white,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 
-  // ── Divider ────────────────────────────────────────────────────────────────
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
-  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.neutral.border },
-  dividerText: { fontSize: Typography.size.sm, color: Colors.neutral.secondary },
-
-  // ── Social ─────────────────────────────────────────────────────────────────
-  socialStack: { gap: Spacing.sm },
+  // ── Sign up / back links ──────────────────────────────────────────────────
   signupRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: Spacing.xs,
+    alignItems: "center",
+    gap: Spacing.sm,
     marginTop: Spacing.sm,
   },
-  signupText: { fontSize: Typography.size.sm, color: Colors.neutral.secondary },
+  signupText: {
+    fontSize: Typography.size.sm,
+    color: Colors.neutral.secondary,
+  },
   signupLink: {
     fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.heavy,
     color: Colors.brand.primary,
-    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.5,
+  },
+  backToLogin: {
+    alignItems: "center",
+    marginTop: Spacing.md,
+  },
+  backToLoginText: {
+    fontSize: Typography.size.base,
+    color: Colors.brand.primary,
+    fontWeight: Typography.weight.semibold,
   },
 
-  // ── Terms ──────────────────────────────────────────────────────────────────
+  // ── Divider ───────────────────────────────────────────────────────────────
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginVertical: Spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.neutral.border,
+  },
+  dividerText: {
+    fontSize: Typography.size.sm,
+    color: Colors.neutral.placeholder,
+    fontWeight: Typography.weight.medium,
+  },
+
+  // ── Social buttons ────────────────────────────────────────────────────────
+  socialStack: { gap: Spacing.sm },
+
+  // ── Terms ─────────────────────────────────────────────────────────────────
   termsText: {
     fontSize: Typography.size.xs,
     color: Colors.neutral.secondary,
     textAlign: "center",
     lineHeight: 18,
+    marginTop: Spacing.sm,
   },
-  termsLink: { color: Colors.brand.primary, fontWeight: Typography.weight.medium },
-
-  // ── Forgot screen ──────────────────────────────────────────────────────────
-  forgotHero: {
-    alignItems: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-  },
-  forgotEmoji: { fontSize: 48 },
-  forgotHeading: {
-    fontSize: Typography.size.xl,
-    fontWeight: Typography.weight.bold,
-    color: Colors.neutral.primary,
-    textAlign: "center",
-  },
-  forgotSubtitle: {
-    fontSize: Typography.size.base,
-    color: Colors.neutral.secondary,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  backToLogin: { alignItems: "center", paddingVertical: Spacing.sm },
-  backToLoginText: {
-    fontSize: Typography.size.base,
+  termsLink: {
     color: Colors.brand.primary,
-    fontWeight: Typography.weight.medium,
+    fontWeight: Typography.weight.semibold,
   },
 
-  // ── Country picker ─────────────────────────────────────────────────────────
+  // ── Country picker modal ──────────────────────────────────────────────────
   pickerWrap: { flex: 1, backgroundColor: Colors.neutral.white },
   pickerHeader: {
     flexDirection: "row",
@@ -1022,19 +1138,18 @@ const s = StyleSheet.create({
     borderBottomColor: Colors.neutral.border,
   },
   pickerTitle: {
-    fontSize: Typography.size.md,
+    fontSize: Typography.size.base,
     fontWeight: Typography.weight.bold,
     color: Colors.neutral.primary,
   },
   pickerDoneBtn: { padding: Spacing.xs },
   pickerDone: {
     fontSize: Typography.size.base,
-    fontWeight: Typography.weight.semibold,
     color: Colors.brand.primary,
+    fontWeight: Typography.weight.semibold,
   },
   pickerSearchWrap: {
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.sm,
+    padding: Spacing.md,
     backgroundColor: Colors.neutral.surface,
   },
   pickerSearch: {
@@ -1047,33 +1162,48 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.neutral.border,
   },
+  pickerLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.neutral.surface,
+  },
+  pickerLoadingText: {
+    fontSize: Typography.size.sm,
+    color: Colors.neutral.secondary,
+  },
   countryRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.md,
     gap: Spacing.md,
+    height: 64,
   },
   countryRowSel: { backgroundColor: "#FFF7ED" },
   flag: { fontSize: 26 },
   countryName: {
     fontSize: Typography.size.base,
-    fontWeight: Typography.weight.medium,
     color: Colors.neutral.primary,
+    fontWeight: Typography.weight.medium,
   },
   countryDial: {
     fontSize: Typography.size.sm,
     color: Colors.neutral.secondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   check: {
-    fontSize: Typography.size.md,
+    fontSize: 16,
     color: Colors.brand.primary,
     fontWeight: Typography.weight.bold,
   },
-  sep: {
-    height: 1,
-    backgroundColor: Colors.neutral.border,
-    marginLeft: Spacing.base + 26 + Spacing.md,
+  sep: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.neutral.border },
+
+  // ── Forgot screen ─────────────────────────────────────────────────────────
+  forgotHero: {
+    alignItems: "center",
+    gap: Spacing.sm,
   },
 });

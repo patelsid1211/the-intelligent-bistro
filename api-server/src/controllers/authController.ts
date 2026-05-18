@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { queryOne, run, uuid } from "../db/localDb.js";
+import { query, queryOne, run, uuid } from "../db/localDb.js";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "bistro-local-dev-secret-change-in-prod";
 const JWT_EXPIRES = "7d";
@@ -252,4 +252,169 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   resetTokens.delete(token.toUpperCase());
 
   res.json({ success: true, data: { message: "Password reset successfully. You can now sign in." } });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROFILE UPDATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const UpdateProfileSchema = z.object({
+  displayName: z.string().min(2).max(50).optional(),
+  phone: z.string().optional().nullable(),
+  avatarUrl: z.string().url().optional().nullable(),
+});
+
+export async function updateProfile(req: Request, res: Response): Promise<void> {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+  const payload = verifyToken(token);
+  if (!payload) { res.status(401).json({ success: false, error: { code: "INVALID_TOKEN", message: "Token invalid." } }); return; }
+
+  const { displayName, phone, avatarUrl } = (req as Request & { parsed: z.infer<typeof UpdateProfileSchema> }).parsed;
+
+  if (displayName) run("UPDATE users SET display_name = ? WHERE id = ?", [displayName, payload.sub]);
+  if (phone !== undefined) run("UPDATE users SET phone = ? WHERE id = ?", [phone ?? null, payload.sub]);
+  if (avatarUrl !== undefined) run("UPDATE users SET avatar_url = ? WHERE id = ?", [avatarUrl ?? null, payload.sub]);
+
+  const user = queryOne<DbUser>("SELECT id, email, display_name, phone, avatar_url FROM users WHERE id = ?", [payload.sub]);
+  res.json({ success: true, data: { id: user!.id, email: user!.email, displayName: user!.display_name, phone: user!.phone, avatarUrl: (user as any).avatar_url } });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADDRESSES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AddressSchema = z.object({
+  label: z.string().default("Home"),
+  street: z.string().min(1),
+  apt: z.string().optional(),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  zip: z.string().min(1),
+  instructions: z.string().optional(),
+  isDefault: z.boolean().default(false),
+});
+
+export function getAddresses(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  const rows = query("SELECT * FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC", [payload.sub]);
+  res.json({ success: true, data: rows });
+}
+
+export function addAddress(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  const body = (req as Request & { parsed: z.infer<typeof AddressSchema> }).parsed;
+  const id = uuid();
+
+  if (body.isDefault) {
+    run("UPDATE user_addresses SET is_default = 0 WHERE user_id = ?", [payload.sub]);
+  }
+
+  run(
+    "INSERT INTO user_addresses (id,user_id,label,street,apt,city,state,zip,instructions,is_default) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    [id, payload.sub, body.label, body.street, body.apt ?? null, body.city, body.state, body.zip, body.instructions ?? null, body.isDefault ? 1 : 0]
+  );
+
+  const address = queryOne("SELECT * FROM user_addresses WHERE id = ?", [id]);
+  res.status(201).json({ success: true, data: address });
+}
+
+export function deleteAddress(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  run("DELETE FROM user_addresses WHERE id = ? AND user_id = ?", [String(req.params.id), payload.sub]);
+  res.json({ success: true, data: { message: "Address deleted." } });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAVOURITES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function getFavourites(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  const rows = query("SELECT menu_item_id FROM user_favourites WHERE user_id = ? ORDER BY created_at DESC", [payload.sub]);
+  res.json({ success: true, data: rows.map((r: any) => r.menu_item_id) });
+}
+
+export function addFavourite(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  const { menuItemId } = req.body as { menuItemId: string };
+  if (!menuItemId) { res.status(400).json({ success: false, error: { code: "MISSING_FIELD", message: "menuItemId required." } }); return; }
+
+  run("INSERT OR IGNORE INTO user_favourites (id,user_id,menu_item_id) VALUES (?,?,?)", [uuid(), payload.sub, menuItemId]);
+  res.json({ success: true, data: { menuItemId } });
+}
+
+export function removeFavourite(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  run("DELETE FROM user_favourites WHERE user_id = ? AND menu_item_id = ?", [payload.sub, String(req.params.menuItemId)]);
+  res.json({ success: true, data: { message: "Removed from favourites." } });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATION PREFERENCES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const NotificationPrefsSchema = z.object({
+  orderUpdates: z.boolean().optional(),
+  promotions: z.boolean().optional(),
+  newItems: z.boolean().optional(),
+  emailNotifications: z.boolean().optional(),
+  pushNotifications: z.boolean().optional(),
+});
+
+export function getNotificationPrefs(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  let prefs = queryOne<any>("SELECT * FROM user_notifications WHERE user_id = ?", [payload.sub]);
+  if (!prefs) {
+    run("INSERT OR IGNORE INTO user_notifications (user_id) VALUES (?)", [payload.sub]);
+    prefs = queryOne<any>("SELECT * FROM user_notifications WHERE user_id = ?", [payload.sub]);
+  }
+  res.json({ success: true, data: {
+    orderUpdates: prefs.order_updates === 1,
+    promotions: prefs.promotions === 1,
+    newItems: prefs.new_items === 1,
+    emailNotifications: prefs.email_notifications === 1,
+    pushNotifications: prefs.push_notifications === 1,
+  }});
+}
+
+export function updateNotificationPrefs(req: Request, res: Response): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const payload = token ? verifyToken(token) : null;
+  if (!payload) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "No token." } }); return; }
+
+  const body = (req as Request & { parsed: z.infer<typeof NotificationPrefsSchema> }).parsed;
+
+  run("INSERT OR IGNORE INTO user_notifications (user_id) VALUES (?)", [payload.sub]);
+
+  if (body.orderUpdates !== undefined) run("UPDATE user_notifications SET order_updates = ? WHERE user_id = ?", [body.orderUpdates ? 1 : 0, payload.sub]);
+  if (body.promotions !== undefined) run("UPDATE user_notifications SET promotions = ? WHERE user_id = ?", [body.promotions ? 1 : 0, payload.sub]);
+  if (body.newItems !== undefined) run("UPDATE user_notifications SET new_items = ? WHERE user_id = ?", [body.newItems ? 1 : 0, payload.sub]);
+  if (body.emailNotifications !== undefined) run("UPDATE user_notifications SET email_notifications = ? WHERE user_id = ?", [body.emailNotifications ? 1 : 0, payload.sub]);
+  if (body.pushNotifications !== undefined) run("UPDATE user_notifications SET push_notifications = ? WHERE user_id = ?", [body.pushNotifications ? 1 : 0, payload.sub]);
+
+  run("UPDATE user_notifications SET updated_at = datetime('now') WHERE user_id = ?", [payload.sub]);
+
+  getNotificationPrefs(req, res);
 }

@@ -2,17 +2,9 @@
  * hooks/useAIChat.ts
  * Shared AI chat logic — used by both the full AI Chat screen and the
  * floating AIBubble mini panel.
- *
- * Handles:
- * - Sending messages to the API (with AbortController)
- * - Falling back to the local mock engine on network failure
- * - Applying AI responses to the cart store
- * - Adding conversation turns
- * - Navigation commands
  */
 
-import { THE_BISTRO } from "@/data/menu";
-import { useAI, useCart } from "@/store";
+import { useAI, useBistroStore, useCart } from "@/store";
 import { sendAIOrder } from "@/store/apiClient";
 import { mockAIEngine } from "@/utils/ai";
 import type { AIOrderResponse } from "@shared/types";
@@ -20,16 +12,93 @@ import { useRouter } from "expo-router";
 import { useCallback, useRef } from "react";
 
 const ROUTE_MAP: Record<string, string> = {
-  cart:        "/(tabs)/cart",
-  home:        "/(tabs)",
-  menu:        "/(tabs)",
-  checkout:    "/(tabs)/cart",
+  cart:     "/(tabs)/cart",
+  home:     "/(tabs)",
+  menu:     "/(tabs)",
+  checkout: "/(tabs)/cart",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD-ON SUGGESTIONS — shown after item is added to cart
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ADD_ON_MAP: Record<string, Array<{ label: string; message: string }>> = {
+  burgers:  [
+    { label: "🍟 Add Fries",         message: "add fries" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🍰 Add Dessert",       message: "show me desserts" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  pizza:    [
+    { label: "🥗 Add a Salad",       message: "show me salads" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🍰 Add Dessert",       message: "show me desserts" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  sushi:    [
+    { label: "🍣 Add More Rolls",    message: "show me sushi" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🍰 Add Dessert",       message: "show me desserts" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  tacos:    [
+    { label: "🥑 Add Guacamole",     message: "add guacamole" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🍰 Add Dessert",       message: "show me desserts" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  bowls:    [
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🍰 Add Dessert",       message: "show me desserts" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  pasta:    [
+    { label: "🥗 Add a Salad",       message: "show me salads" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🍰 Add Dessert",       message: "show me desserts" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  salads:   [
+    { label: "🍕 Add a Pizza",       message: "show me pizza" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  desserts: [
+    { label: "☕ Add a Coffee",      message: "add cold brew" },
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  drinks:   [
+    { label: "🍔 Add a Burger",      message: "show me burgers" },
+    { label: "🍕 Add a Pizza",       message: "show me pizza" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+  deals:    [
+    { label: "🥤 Add a Drink",       message: "show me drinks" },
+    { label: "🛒 Order Summary",     message: "show order summary" },
+  ],
+};
+
+const DEFAULT_ADD_ONS = [
+  { label: "🥤 Add a Drink",   message: "show me drinks" },
+  { label: "🍰 Add Dessert",   message: "show me desserts" },
+  { label: "🛒 Order Summary", message: "show order summary" },
+];
+
+function getAddOnSuggestions(menuItemIds: string[]) {
+  const store = useBistroStore.getState();
+  // Find the category of the first added item
+  const firstItem = store.menuItemMap.get(menuItemIds[0]);
+  if (!firstItem) return DEFAULT_ADD_ONS;
+  return ADD_ON_MAP[firstItem.categoryId] ?? DEFAULT_ADD_ONS;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOOK
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface UseAIChatOptions {
-  /** Called after each response is processed (e.g. scroll to bottom). */
   onResponse?: () => void;
-  /** Called when a NAVIGATE action fires (e.g. close the mini panel). */
   onNavigate?: () => void;
 }
 
@@ -49,38 +118,42 @@ export function useAIChat(options: UseAIChatOptions = {}) {
   const abortRef = useRef<AbortController | null>(null);
   const cartItemCount = cart.items.reduce((s, i) => s + i.quantity, 0);
 
-  /** Apply a resolved AI response to the store and trigger side effects. */
   const handleResponse = useCallback(
     (response: AIOrderResponse) => {
       // Apply cart mutations
-      if (
-        ["CART_ADD", "CART_REMOVE", "CART_CLEAR", "CART_UPDATE_QUANTITY"].includes(
-          response.action
-        )
-      ) {
+      if (["CART_ADD", "CART_REMOVE", "CART_CLEAR", "CART_UPDATE_QUANTITY"].includes(response.action)) {
         applyAIResponse(response);
       }
 
-      // Add assistant turn (with optional option cards)
+      // Determine add-on suggestions for CART_ADD
+      const isCartAdd = response.action === "CART_ADD" || response.action === "CART_UPDATE_QUANTITY";
+      const addedIds = isCartAdd
+        ? (response.updatedCartItems ?? []).map((i) => i.menuItemId)
+        : [];
+      const addOnSuggestions = addedIds.length > 0 ? getAddOnSuggestions(addedIds) : undefined;
+
+      // Detect order summary request
+      const isOrderSummary = response.action === "NAVIGATE" && response.navigateTo === "cart";
+
       addConversationTurn({
         role: "assistant",
         content: response.aiNarration,
         timestamp: Date.now(),
-        menuOptions:
-          response.action === "SHOW_OPTIONS" ? response.menuOptions : undefined,
+        menuOptions: response.action === "SHOW_OPTIONS" ? response.menuOptions : undefined,
         optionCategory: response.optionCategory,
+        addOnSuggestions,
+        showOrderSummary: isOrderSummary,
       });
 
       setProcessing(false);
       onResponse?.();
 
-      // Handle navigation
-      if (response.action === "NAVIGATE" && response.navigateTo) {
+      // Handle navigation — but NOT for cart (we show summary inline instead)
+      if (response.action === "NAVIGATE" && response.navigateTo && response.navigateTo !== "cart") {
         const route =
           response.navigateTo === "item-detail" && response.navigateItemId
             ? `/item/${response.navigateItemId}`
             : (ROUTE_MAP[response.navigateTo] ?? "/(tabs)");
-
         onNavigate?.();
         setTimeout(() => router.push(route as any), onNavigate ? 300 : 0);
       }
@@ -88,18 +161,15 @@ export function useAIChat(options: UseAIChatOptions = {}) {
     [applyAIResponse, addConversationTurn, setProcessing, onResponse, onNavigate, router]
   );
 
-  /** Send a user message, call the API, fall back to mock on failure. */
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || isProcessing) return;
 
-      // Add user turn immediately
       addConversationTurn({ role: "user", content: trimmed, timestamp: Date.now() });
       setProcessing(true);
       onResponse?.();
 
-      // Cancel any in-flight request
       abortRef.current?.abort();
       abortRef.current = new AbortController();
 
@@ -109,7 +179,7 @@ export function useAIChat(options: UseAIChatOptions = {}) {
           {
             utterance: trimmed,
             currentCart: cart,
-            restaurantId: THE_BISTRO.id,
+            restaurantId: cart.restaurantId,
             conversationHistory: conversationHistory.slice(-10),
           },
           abortRef.current.signal
@@ -118,11 +188,7 @@ export function useAIChat(options: UseAIChatOptions = {}) {
         if (apiResult === null) {
           response = mockAIEngine(trimmed, cartItemCount);
         } else if (!apiResult.success) {
-          response = {
-            action: "CLARIFY",
-            aiNarration: "I ran into an issue. Please try again.",
-            requiresClarification: false,
-          };
+          response = { action: "CLARIFY", aiNarration: "I ran into an issue. Please try again.", requiresClarification: false };
         } else {
           response = apiResult.data;
         }
@@ -136,21 +202,8 @@ export function useAIChat(options: UseAIChatOptions = {}) {
 
       handleResponse(response);
     },
-    [
-      isProcessing,
-      cartItemCount,
-      cart,
-      conversationHistory,
-      addConversationTurn,
-      setProcessing,
-      handleResponse,
-      onResponse,
-    ]
+    [isProcessing, cartItemCount, cart, conversationHistory, addConversationTurn, setProcessing, handleResponse, onResponse]
   );
 
-  return {
-    sendMessage,
-    isProcessing,
-    conversationHistory,
-  };
+  return { sendMessage, isProcessing, conversationHistory };
 }

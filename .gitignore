@@ -16,6 +16,7 @@ node_modules/
 .env.staging
 .env*.local
 api-server/.env
+api-server/.env.example
 api-server/.env.local
 api-server/.env.production
 

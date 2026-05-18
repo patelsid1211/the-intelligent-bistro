@@ -13,7 +13,6 @@
 
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
 import { SCREEN_H, SCREEN_W, SNAP_MARGIN, TAB_BAR_HEIGHT } from "@/constants/layout";
-import { MENU_ITEM_MAP } from "@/data/menu";
 import { useAIChat } from "@/hooks/useAIChat";
 import { useAI, useBistroStore } from "@/store";
 import { buildDefaultSelections, expandSelections } from "@/utils/customization";
@@ -214,7 +213,7 @@ function MiniChatPanel({ onClose, onOpenFull, panelAnim }: MiniChatPanelProps) {
   }, [sendMessage]);
 
   const handleAddOption = useCallback((menuItemId: string) => {
-    const item = MENU_ITEM_MAP.get(menuItemId);
+    const item = useBistroStore.getState().menuItemMap.get(menuItemId);
     if (!item) return;
     const defaultSelections = buildDefaultSelections(item);
     const customizations = expandSelections(item, defaultSelections);

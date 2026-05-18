@@ -34,7 +34,6 @@ export default function RootLayout() {
   useEffect(() => {
     loadSession().then((session) => {
       if (!session) return;
-      // Verify token is still valid by checking expiry (JWT payload)
       try {
         const payload = JSON.parse(atob(session.accessToken.split(".")[1]));
         if (payload.exp * 1000 > Date.now()) {
@@ -47,6 +46,11 @@ export default function RootLayout() {
       }
     });
   }, [setAuth]);
+
+  // Load menu from API on launch (falls back to hardcoded data if server unreachable)
+  useEffect(() => {
+    useBistroStore.getState().loadMenu();
+  }, []);
 
   useEffect(() => {
     if (fontError) throw fontError;

@@ -84,13 +84,13 @@ function createSchema(db: Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS users (
-      id           TEXT PRIMARY KEY,
-      email        TEXT UNIQUE NOT NULL,
+      id            TEXT PRIMARY KEY,
+      email         TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      display_name TEXT NOT NULL,
-      phone        TEXT,
-      avatar_url   TEXT,
-      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      display_name  TEXT NOT NULL,
+      phone         TEXT,
+      avatar_url    TEXT,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS orders (
@@ -116,10 +116,54 @@ function createSchema(db: Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS promo_codes (
+      code                TEXT PRIMARY KEY,
+      type                TEXT NOT NULL CHECK(type IN ('percentage','flat','free_delivery','bogo')),
+      value               INTEGER NOT NULL,
+      description         TEXT NOT NULL,
+      minimum_order_amount INTEGER NOT NULL DEFAULT 0,
+      expires_at          TEXT NOT NULL,
+      is_active           INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS user_addresses (
+      id           TEXT PRIMARY KEY,
+      user_id      TEXT NOT NULL,
+      label        TEXT NOT NULL DEFAULT 'Home',
+      street       TEXT NOT NULL,
+      apt          TEXT,
+      city         TEXT NOT NULL,
+      state        TEXT NOT NULL,
+      zip          TEXT NOT NULL,
+      instructions TEXT,
+      is_default   INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_favourites (
+      id           TEXT PRIMARY KEY,
+      user_id      TEXT NOT NULL,
+      menu_item_id TEXT NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, menu_item_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      user_id              TEXT PRIMARY KEY,
+      order_updates        INTEGER NOT NULL DEFAULT 1,
+      promotions           INTEGER NOT NULL DEFAULT 1,
+      new_items            INTEGER NOT NULL DEFAULT 0,
+      email_notifications  INTEGER NOT NULL DEFAULT 1,
+      push_notifications   INTEGER NOT NULL DEFAULT 1,
+      updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
     CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
     CREATE INDEX IF NOT EXISTS idx_history_order ON order_status_history(order_id);
+    CREATE INDEX IF NOT EXISTS idx_addresses_user ON user_addresses(user_id);
+    CREATE INDEX IF NOT EXISTS idx_favourites_user ON user_favourites(user_id);
   `);
 }
 
@@ -251,6 +295,10 @@ function seedIfEmpty(db: Database): void {
   p("drink-02","Matcha Latte","Ceremonial-grade Japanese matcha whisked with steamed oat milk and a touch of honey. Hot or iced.",649,IMG+"1536256263959-770b48d82b0a?w=800","drinks",["vegan","gluten-free"],140,4.8,987,[drinkSize,{"id":"latte-temp","label":"Temperature","type":"single","minSelections":1,"maxSelections":1,"options":[{"id":"temp-hot","label":"Hot","priceDelta":0,"isDefault":true},{"id":"temp-iced","label":"Iced","priceDelta":0}]},{"id":"latte-milk","label":"Choose Milk","type":"single","minSelections":1,"maxSelections":1,"options":[{"id":"milk-oat","label":"Oat Milk","priceDelta":0,"isDefault":true},{"id":"milk-almond","label":"Almond Milk","priceDelta":0},{"id":"milk-whole","label":"Whole Milk","priceDelta":0}]}]);
   p("drink-03","Sparkling Water","Chilled San Pellegrino sparkling mineral water.",299,IMG+"1559839734-2b71ea197ec2?w=800","drinks",["vegan","gluten-free","dairy-free"],0,4.5,234,[]);
   p("drink-04","Fresh Pressed Juice","Cold-pressed daily. Green Detox (kale, cucumber, apple, ginger), Sunrise (orange, carrot, turmeric), or Berry Blast.",799,IMG+"1600271886742-f049cd451bba?w=800","drinks",["vegan","gluten-free","dairy-free"],120,4.7,678,[{"id":"juice-flavor","label":"Choose Juice","type":"single","minSelections":1,"maxSelections":1,"options":[{"id":"jf-green","label":"Green Detox","priceDelta":0,"isDefault":true},{"id":"jf-sunrise","label":"Sunrise","priceDelta":0},{"id":"jf-berry","label":"Berry Blast","priceDelta":0}]}]);
+  p("drink-05","Still Water (Large)","Chilled still mineral water, large 500ml bottle. Pure, refreshing, and always available.",249,IMG+"1548839140-29a749e1cf4d?w=800","drinks",["vegan","gluten-free","dairy-free"],0,4.6,890,[]);
+  p("drink-06","Cold Brew Coffee","Smooth 24-hour cold brew concentrate over ice. Served black or with your choice of milk.",549,IMG+"1461023058943-07fcbe16d735?w=800","drinks",["vegan","gluten-free"],10,4.8,1102,[{"id":"cold-brew-milk","label":"Add Milk","type":"single","minSelections":1,"maxSelections":1,"options":[{"id":"cb-black","label":"Black","priceDelta":0,"isDefault":true},{"id":"cb-oat","label":"Oat Milk","priceDelta":50},{"id":"cb-almond","label":"Almond Milk","priceDelta":50},{"id":"cb-whole","label":"Whole Milk","priceDelta":50}]}]);
+  p("drink-07","Energy Boost","Natural energy drink with green tea extract, B-vitamins, and electrolytes. Zero sugar.",449,IMG+"1622543925917-763c34d1a86e?w=800","drinks",["vegan","gluten-free","dairy-free"],15,4.5,432,[{"id":"energy-flavor","label":"Choose Flavor","type":"single","minSelections":1,"maxSelections":1,"options":[{"id":"ef-citrus","label":"Citrus Burst","priceDelta":0,"isDefault":true},{"id":"ef-berry","label":"Mixed Berry","priceDelta":0},{"id":"ef-tropical","label":"Tropical Punch","priceDelta":0},{"id":"ef-watermelon","label":"Watermelon Mint","priceDelta":0}]}]);
+  p("drink-08","Mango Lassi","Creamy blend of fresh Alphonso mango, yogurt, cardamom, and a hint of rose water.",599,IMG+"1553361371-9b22f78e8b1d?w=800","drinks",["vegetarian","gluten-free"],220,4.7,765,[drinkSize]);
   p("drink-05","Cold Brew Coffee","Smooth 24-hour cold brew concentrate over ice. Served black or with oat milk.",549,IMG+"1461023058943-07fcbe16d735?w=800","drinks",["vegan","gluten-free"],10,4.8,876,[{"id":"cold-brew-milk","label":"Add Milk","type":"single","minSelections":1,"maxSelections":1,"options":[{"id":"cb-black","label":"Black","priceDelta":0,"isDefault":true},{"id":"cb-oat","label":"Oat Milk","priceDelta":50},{"id":"cb-almond","label":"Almond Milk","priceDelta":50}]}]);
   p("drink-06","Mango Lassi","Creamy blend of fresh Alphonso mango, yogurt, cardamom, and a hint of rose water.",599,IMG+"1553361371-9b22f78e8b1d?w=800","drinks",["vegetarian","gluten-free"],220,4.7,543,[]);
 
@@ -260,6 +308,24 @@ function seedIfEmpty(db: Database): void {
   p("deal-03","Pizza + Salad Lunch Deal","Any 10\" personal pizza with a Bistro Caesar salad. Available 11am–3pm. Save $5.",2199,IMG+"1574071318508-1cdbab80d002?w=800","deals",["popular"],900,4.7,2109,[pizzaCrust]);
 
   ins.free();
+
+  // Promo codes
+  const promos = [
+    ["BISTRO10",  "percentage", 10,  "10% off your order",          2000, "2027-12-31"],
+    ["SAVE10",    "percentage", 10,  "10% off your order",          1000, "2027-12-31"],
+    ["FLAT5",     "flat",       500, "$5 off your order",           1000, "2027-12-31"],
+    ["FREESHIP",  "free_delivery", 0, "Free delivery on your order", 1500, "2027-12-31"],
+    ["WELCOME5",  "flat",       500, "$5 off your first order",     1000, "2027-12-31"],
+    ["LUNCH20",   "percentage", 20,  "20% off lunch orders",        1500, "2027-12-31"],
+    ["NEWUSER",   "percentage", 15,  "15% off for new users",       0,    "2027-12-31"],
+  ];
+  for (const [code, type, value, desc, minOrder, expires] of promos) {
+    db.run(
+      "INSERT OR IGNORE INTO promo_codes (code,type,value,description,minimum_order_amount,expires_at,is_active) VALUES (?,?,?,?,?,?,1)",
+      [code, type, value, desc, minOrder, expires]
+    );
+  }
+
   console.log("[DB] Seeded successfully.");
 }
 

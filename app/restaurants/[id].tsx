@@ -10,7 +10,6 @@
 
 import BackButton from "@/components/BackButton";
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
-import { MENU_ITEM_MAP } from "@/data/menu";
 import { RESTAURANT_MAP } from "@/data/restaurants";
 import { useBistroStore } from "@/store";
 import { formatPrice } from "@/utils/format";
@@ -70,7 +69,7 @@ export default function RestaurantDetailScreen() {
   const handleItemPress = useCallback((item: { id: string; menuItemId?: string }) => {
     // If the item has a menuItemId mapping, open the full item detail with customizations
     const targetId = item.menuItemId ?? item.id;
-    if (MENU_ITEM_MAP.has(targetId)) {
+    if (useBistroStore.getState().menuItemMap.has(targetId)) {
       router.push(`/item/${targetId}` as any);
     }
     // Items without a mapping (e.g. Loaded Fries) are added via the + button only

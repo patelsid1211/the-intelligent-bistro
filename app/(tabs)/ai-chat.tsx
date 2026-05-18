@@ -8,9 +8,8 @@
 
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
 import { TAB_BAR_HEIGHT } from "@/constants/layout";
-import { MENU_ITEM_MAP } from "@/data/menu";
 import { useAIChat } from "@/hooks/useAIChat";
-import { useAI, useBistroStore } from "@/store";
+import { useAI, useBistroStore, useMenu } from "@/store";
 import {
     buildDefaultSelections,
     computeSelectionDelta,
@@ -22,7 +21,10 @@ import { formatPrice } from "@/utils/format";
 import type {
     AIConversationTurn,
     AIMenuOption,
+    CartItem,
+    CartPricingBreakdown,
 } from "@shared/types";
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -72,7 +74,8 @@ interface CustomizeModalProps {
 }
 
 function CustomizeModal({ visible, menuItemId, onClose, onConfirm }: CustomizeModalProps) {
-  const item = MENU_ITEM_MAP.get(menuItemId);
+  const { menuItemMap } = useMenu();
+  const item = menuItemMap.get(menuItemId);
   const [qty, setQty] = useState(1);
   const [selections, setSelections] = useState<SelectionMap>({});
 
@@ -604,9 +607,14 @@ interface MessageBubbleProps {
   isLatest: boolean;
   onSelectOption: (menuItemId: string) => void;
   onCustomizeOption: (menuItemId: string) => void;
+  onChipPress: (message: string) => void;
+  onPlaceOrder: () => void;
+  onKeepOrdering: () => void;
+  cartItems: CartItem[];
+  cartPricing: CartPricingBreakdown | null;
 }
 
-function MessageBubble({ turn, isLatest, onSelectOption, onCustomizeOption }: MessageBubbleProps) {
+function MessageBubble({ turn, isLatest, onSelectOption, onCustomizeOption, onChipPress, onPlaceOrder, onKeepOrdering, cartItems, cartPricing }: MessageBubbleProps) {
   const isUser = turn.role === "user";
   const opacity = useRef(new Animated.Value(isLatest ? 0 : 1)).current;
   const translateY = useRef(new Animated.Value(isLatest ? 12 : 0)).current;
@@ -621,7 +629,8 @@ function MessageBubble({ turn, isLatest, onSelectOption, onCustomizeOption }: Me
 
   const time = new Date(turn.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const hasOptions = !isUser && turn.menuOptions && turn.menuOptions.length > 0;
-
+  const hasAddOns = !isUser && turn.addOnSuggestions && turn.addOnSuggestions.length > 0;
+  const showSummary = !isUser && turn.showOrderSummary && cartItems.length > 0;
   return (
     <Animated.View style={[{ opacity, transform: [{ translateY }] }]}>
       <View style={[bs.row, isUser ? bs.userRow : bs.aiRow]}>
@@ -636,18 +645,56 @@ function MessageBubble({ turn, isLatest, onSelectOption, onCustomizeOption }: Me
       {/* Inline option cards */}
       {hasOptions && (
         <View style={bs.optionsContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={bs.optionsList}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={bs.optionsList}>
             {turn.menuOptions!.map((opt) => (
-              <OptionCard
-                key={opt.menuItemId}
-                option={opt}
-                onSelect={onSelectOption}
-                onCustomize={onCustomizeOption}
-              />
+              <OptionCard key={opt.menuItemId} option={opt} onSelect={onSelectOption} onCustomize={onCustomizeOption} />
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Order summary card */}
+      {showSummary && cartPricing && (
+        <View style={bs.summaryCard}>
+          <Text style={bs.summaryTitle}>🛒 Order Summary</Text>
+          {cartItems.map((item) => (
+            <View key={item.lineItemId} style={bs.summaryRow}>
+              <Text style={bs.summaryItemName} numberOfLines={1}>{item.quantity}× {item.name}</Text>
+              <Text style={bs.summaryItemPrice}>{formatPrice(item.lineTotal)}</Text>
+            </View>
+          ))}
+          <View style={bs.summaryDivider} />
+          <View style={bs.summaryRow}>
+            <Text style={bs.summarySubLabel}>Subtotal</Text>
+            <Text style={bs.summarySubValue}>{formatPrice(cartPricing.subtotal)}</Text>
+          </View>
+          <View style={bs.summaryRow}>
+            <Text style={bs.summarySubLabel}>Delivery + Fees</Text>
+            <Text style={bs.summarySubValue}>{formatPrice(cartPricing.deliveryFee + cartPricing.serviceFee)}</Text>
+          </View>
+          <View style={bs.summaryRow}>
+            <Text style={bs.summaryTotalLabel}>Total</Text>
+            <Text style={bs.summaryTotalValue}>{formatPrice(cartPricing.total)}</Text>
+          </View>
+          <View style={bs.summaryActions}>
+            <TouchableOpacity style={bs.keepOrderingBtn} onPress={onKeepOrdering}>
+              <Text style={bs.keepOrderingText}>Keep Ordering</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={bs.placeOrderBtn} onPress={onPlaceOrder}>
+              <Text style={bs.placeOrderText}>Place Order 🚀</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Add-on suggestion chips */}
+      {hasAddOns && (
+        <View style={bs.addOnsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={bs.addOnsList}>
+            {turn.addOnSuggestions!.map((chip) => (
+              <TouchableOpacity key={chip.message} style={bs.addOnChip} onPress={() => onChipPress(chip.message)}>
+                <Text style={bs.addOnChipText}>{chip.label}</Text>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
@@ -699,6 +746,127 @@ const bs = StyleSheet.create({
   // Options
   optionsContainer: { marginLeft: 36 + Spacing.sm + Spacing.base, marginBottom: Spacing.md, marginTop: 4 },
   optionsList: { paddingRight: Spacing.base },
+
+  // Order summary card
+  summaryCard: {
+    marginLeft: 36 + Spacing.sm,
+    marginRight: Spacing.base,
+    marginBottom: Spacing.md,
+    marginTop: 4,
+    backgroundColor: Colors.neutral.white,
+    borderRadius: Radius.xl,
+    padding: Spacing.base,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: Colors.brand.primary + "22",
+  },
+  summaryTitle: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.bold,
+    color: Colors.neutral.primary,
+    marginBottom: Spacing.sm,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 3,
+  },
+  summaryItemName: {
+    flex: 1,
+    fontSize: Typography.size.sm,
+    color: Colors.neutral.primary,
+    fontWeight: Typography.weight.medium,
+  },
+  summaryItemPrice: {
+    fontSize: Typography.size.sm,
+    color: Colors.neutral.primary,
+    fontWeight: Typography.weight.semibold,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: Colors.neutral.border,
+    marginVertical: Spacing.sm,
+  },
+  summarySubLabel: { fontSize: Typography.size.sm, color: Colors.neutral.secondary },
+  summarySubValue: { fontSize: Typography.size.sm, color: Colors.neutral.secondary },
+  summaryTotalLabel: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.bold,
+    color: Colors.neutral.primary,
+  },
+  summaryTotalValue: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.heavy,
+    color: Colors.brand.primary,
+  },
+  summaryActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  keepOrderingBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: Radius.xl,
+    borderWidth: 1.5,
+    borderColor: Colors.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  keepOrderingText: {
+    fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.bold,
+    color: Colors.brand.primary,
+  },
+  placeOrderBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.brand.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  placeOrderText: {
+    fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.bold,
+    color: Colors.neutral.white,
+  },
+
+  // Add-on suggestion chips
+  addOnsContainer: {
+    marginLeft: 36 + Spacing.sm,
+    marginBottom: Spacing.md,
+    marginTop: 4,
+  },
+  addOnsList: { paddingRight: Spacing.base, gap: Spacing.sm },
+  addOnChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.neutral.white,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.brand.primary + "55",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addOnChipText: {
+    fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.semibold,
+    color: Colors.brand.primary,
+  },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -708,6 +876,9 @@ const bs = StyleSheet.create({
 export default function AIChatScreen() {
   const { conversationHistory, isProcessing, clearConversation } = useAI();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const cartItems = useBistroStore((s) => s.cart.items);
+  const cartPricing = useBistroStore((s) => s.pricing);
 
   const [input, setInput] = useState("");
   const [customizeItemId, setCustomizeItemId] = useState<string | null>(null);
@@ -732,22 +903,35 @@ export default function AIChatScreen() {
 
   // ── Option card: quick-add with defaults ──────────────────────────────────
   const handleSelectOption = useCallback((menuItemId: string) => {
-    const item = MENU_ITEM_MAP.get(menuItemId);
+    const item = useBistroStore.getState().menuItemMap.get(menuItemId);
     if (!item) return;
     if (item.customizationGroups.some((g) => g.minSelections > 0)) {
-      // Has required customizations — open the modal instead
       setCustomizeItemId(menuItemId);
       return;
     }
     const defaultSelections = buildDefaultSelections(item);
     const customizations = expandSelections(item, defaultSelections);
-    const { addItem: storeAdd, addConversationTurn: storeAddTurn } =
-      useBistroStore.getState();
+    const { addItem: storeAdd, addConversationTurn: storeAddTurn } = useBistroStore.getState();
     storeAdd(menuItemId, 1, customizations);
+
+    // Build add-on suggestions based on category
+    const addOnMap: Record<string, Array<{ label: string; message: string }>> = {
+      burgers:  [{ label: "🍟 Add Fries", message: "add fries" }, { label: "🥤 Add Drink", message: "show me drinks" }, { label: "🍰 Dessert", message: "show me desserts" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      pizza:    [{ label: "🥗 Add Salad", message: "show me salads" }, { label: "🥤 Add Drink", message: "show me drinks" }, { label: "🍰 Dessert", message: "show me desserts" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      sushi:    [{ label: "🍣 More Rolls", message: "show me sushi" }, { label: "🥤 Add Drink", message: "show me drinks" }, { label: "🍰 Dessert", message: "show me desserts" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      tacos:    [{ label: "🥤 Add Drink", message: "show me drinks" }, { label: "🍰 Dessert", message: "show me desserts" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      bowls:    [{ label: "🥤 Add Drink", message: "show me drinks" }, { label: "🍰 Dessert", message: "show me desserts" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      pasta:    [{ label: "🥗 Add Salad", message: "show me salads" }, { label: "🥤 Add Drink", message: "show me drinks" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      desserts: [{ label: "☕ Add Coffee", message: "add cold brew" }, { label: "🛒 Order Summary", message: "show order summary" }],
+      drinks:   [{ label: "🍔 Add Burger", message: "show me burgers" }, { label: "🍕 Add Pizza", message: "show me pizza" }, { label: "🛒 Order Summary", message: "show order summary" }],
+    };
+    const addOnSuggestions = addOnMap[item.categoryId] ?? [{ label: "🛒 Order Summary", message: "show order summary" }, { label: "🥤 Add Drink", message: "show me drinks" }];
+
     storeAddTurn({
       role: "assistant",
       content: `Added ${item.name} to your cart! 🛒 Anything else?`,
       timestamp: Date.now(),
+      addOnSuggestions,
     });
     scrollToBottom();
   }, [scrollToBottom]);
@@ -759,10 +943,9 @@ export default function AIChatScreen() {
 
   // ── Customization modal confirm ─────────────────────────────────────────────
   const handleCustomizeConfirm = useCallback((menuItemId: string, qty: number, selectionMap: SelectionMap) => {
-    const item = MENU_ITEM_MAP.get(menuItemId);
+    const item = useBistroStore.getState().menuItemMap.get(menuItemId);
     if (!item) return;
-    const { addItem: storeAdd, addConversationTurn: storeAddTurn } =
-      useBistroStore.getState();
+    const { addItem: storeAdd, addConversationTurn: storeAddTurn } = useBistroStore.getState();
     const selectedCustomizations = expandSelections(item, selectionMap);
     storeAdd(menuItemId, qty, selectedCustomizations);
     const summary = selectedCustomizations.slice(0, 4).map((c) => c.optionLabel).join(", ");
@@ -770,9 +953,29 @@ export default function AIChatScreen() {
       role: "assistant",
       content: `Added ${qty > 1 ? `${qty}× ` : ""}${item.name}${summary ? ` (${summary})` : ""} to your cart! 🛒 Anything else?`,
       timestamp: Date.now(),
+      addOnSuggestions: [
+        { label: "🛒 Order Summary", message: "show order summary" },
+        { label: "🥤 Add Drink", message: "show me drinks" },
+        { label: "🍰 Add Dessert", message: "show me desserts" },
+      ],
     });
     scrollToBottom();
   }, [scrollToBottom]);
+
+  // ── Chip press ────────────────────────────────────────────────────────────
+  const handleChipPress = useCallback((message: string) => {
+    sendMessage(message);
+  }, [sendMessage]);
+
+  // ── Place order ───────────────────────────────────────────────────────────
+  const handlePlaceOrder = useCallback(() => {
+    router.push("/(tabs)/cart" as any);
+  }, [router]);
+
+  const handleKeepOrdering = useCallback(() => {
+    // Just focus the input
+    inputRef.current?.focus();
+  }, []);
 
   const isEmpty = conversationHistory.length === 0;
 
@@ -826,6 +1029,11 @@ export default function AIChatScreen() {
                 isLatest={index === conversationHistory.length - 1 && !isProcessing}
                 onSelectOption={handleSelectOption}
                 onCustomizeOption={handleCustomizeOption}
+                onChipPress={handleChipPress}
+                onPlaceOrder={handlePlaceOrder}
+                onKeepOrdering={handleKeepOrdering}
+                cartItems={cartItems}
+                cartPricing={cartPricing}
               />
             )}
             contentContainerStyle={{ paddingTop: Spacing.base, paddingBottom: Spacing.md }}

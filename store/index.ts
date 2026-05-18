@@ -4,19 +4,39 @@
  * Single source of truth for auth, cart, UI, and AI conversation state.
  */
 
-import { THE_BISTRO } from "@/data/menu";
+import { MENU_CATEGORIES as FALLBACK_CATEGORIES, THE_BISTRO } from "@/data/menu";
 import type {
-    AIConversationTurn,
-    AIOrderResponse,
-    AuthUser,
-    Cart,
-    CartItem,
-    CartPricingBreakdown,
-    SelectedCustomization,
+  AIConversationTurn,
+  AIOrderResponse,
+  AuthUser,
+  Cart,
+  CartItem,
+  CartPricingBreakdown,
+  MenuCategory,
+  MenuItem,
+  SelectedCustomization,
 } from "@shared/types";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { useShallow } from "zustand/shallow";
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+
+async function _fetchCategories(): Promise<MenuCategory[] | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/categories`);
+    const json = await res.json();
+    return json.success ? json.data : null;
+  } catch { return null; }
+}
+
+async function _fetchProducts(): Promise<MenuItem[] | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/products?limit=100`);
+    const json = await res.json();
+    return json.success ? json.data.products : null;
+  } catch { return null; }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRICING CONSTANTS
@@ -102,6 +122,18 @@ interface UIState {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MENU STATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MenuState {
+  categories: MenuCategory[];
+  menuItems: MenuItem[];
+  menuItemMap: Map<string, MenuItem>;
+  isMenuLoaded: boolean;
+  isMenuLoading: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ACTIONS SHAPE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -145,14 +177,20 @@ interface UIActions {
   closeCustomizationSheet: () => void;
 }
 
+interface MenuActions {
+  loadMenu: () => Promise<void>;
+}
+
 type BistroStore = AuthState &
   CartState &
   AIState &
   UIState &
+  MenuState &
   AuthActions &
   CartActions &
   AIActions &
-  UIActions;
+  UIActions &
+  MenuActions;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INITIAL STATE
@@ -199,7 +237,9 @@ export const useBistroStore = create<BistroStore>()(
     recentlyUpdatedLineItemIds: [],
 
     addItem: (menuItemId, quantity, selectedCustomizations, specialInstructions) => {
-      const menuItem = THE_BISTRO.menuItems.find((m) => m.id === menuItemId);
+      const state = get();
+      const menuItem = state.menuItemMap.get(menuItemId)
+        ?? THE_BISTRO.menuItems.find((m) => m.id === menuItemId);
       if (!menuItem) return;
 
       const unitPrice = computeUnitPrice(menuItem.basePrice, selectedCustomizations);
@@ -312,9 +352,8 @@ export const useBistroStore = create<BistroStore>()(
         response.action === "CART_UPDATE_QUANTITY"
       ) {
         response.updatedCartItems?.forEach((instruction) => {
-          const menuItem = THE_BISTRO.menuItems.find(
-            (m) => m.id === instruction.menuItemId
-          );
+          const menuItem = store.menuItemMap.get(instruction.menuItemId)
+            ?? THE_BISTRO.menuItems.find((m) => m.id === instruction.menuItemId);
           if (!menuItem) return;
 
           // Build SelectedCustomization array from the instruction map
@@ -413,6 +452,38 @@ export const useBistroStore = create<BistroStore>()(
       set({ isCustomizationSheetOpen: true, customizationItemId: itemId }),
     closeCustomizationSheet: () =>
       set({ isCustomizationSheetOpen: false, customizationItemId: null }),
+
+    // ── Menu ──────────────────────────────────────────────────────────────────
+    categories: FALLBACK_CATEGORIES,
+    menuItems: THE_BISTRO.menuItems,
+    menuItemMap: new Map(THE_BISTRO.menuItems.map((m) => [m.id, m])),
+    isMenuLoaded: false,
+    isMenuLoading: false,
+
+    loadMenu: async () => {
+      const state = get();
+      if (state.isMenuLoaded || state.isMenuLoading) return;
+      set({ isMenuLoading: true });
+      try {
+        const [categories, products] = await Promise.all([
+          _fetchCategories(),
+          _fetchProducts(),
+        ]);
+        if (categories && products) {
+          const itemMap = new Map(products.map((m) => [m.id, m]));
+          set({
+            categories,
+            menuItems: products,
+            menuItemMap: itemMap,
+            isMenuLoaded: true,
+          });
+        }
+      } catch {
+        // silently fall back to hardcoded data
+      } finally {
+        set({ isMenuLoading: false });
+      }
+    },
   }))
 );
 
@@ -483,4 +554,16 @@ export const useUI = () =>
 export const useCartItemCount = () =>
   useBistroStore((s) =>
     s.cart.items.reduce((sum, item) => sum + item.quantity, 0)
+  );
+
+export const useMenu = () =>
+  useBistroStore(
+    useShallow((s) => ({
+      categories: s.categories,
+      menuItems: s.menuItems,
+      menuItemMap: s.menuItemMap,
+      isMenuLoaded: s.isMenuLoaded,
+      isMenuLoading: s.isMenuLoading,
+      loadMenu: s.loadMenu,
+    }))
   );

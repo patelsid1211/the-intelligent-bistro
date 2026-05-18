@@ -263,6 +263,10 @@ export interface AIConversationTurn {
   /** If this turn contains interactive option cards */
   menuOptions?: AIMenuOption[];
   optionCategory?: string;
+  /** Quick-add suggestion chips shown after item is added */
+  addOnSuggestions?: Array<{ label: string; message: string }>;
+  /** If true, renders an order summary card with place-order CTA */
+  showOrderSummary?: boolean;
 }
 
 export interface AIOrderRequest {

@@ -5,8 +5,7 @@
 
 import BackButton from "@/components/BackButton";
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
-import { MENU_ITEM_MAP, THE_BISTRO } from "@/data/menu";
-import { useCart } from "@/store";
+import { useBistroStore, useCart, useMenu } from "@/store";
 import { formatPrice } from "@/utils/format";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -18,21 +17,11 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SEED — pre-populate with a few popular items
-// ─────────────────────────────────────────────────────────────────────────────
-
-const DEFAULT_FAVOURITES = [
-  "burger-01",
-  "pizza-01",
-  "sushi-01",
-  "bowl-01",
-  "dessert-01",
-];
+const DEFAULT_FAVOURITES = ["burger-01", "pizza-01", "sushi-01", "bowl-01", "dessert-01"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FAVOURITE CARD
@@ -45,10 +34,11 @@ interface FavCardProps {
 }
 
 function FavCard({ menuItemId, onRemove, onAdd }: FavCardProps) {
-  const item = MENU_ITEM_MAP.get(menuItemId);
+  const { menuItemMap, categories } = useMenu();
+  const item = menuItemMap.get(menuItemId);
   if (!item) return null;
 
-  const category = THE_BISTRO.categories.find((c) => c.id === item.categoryId);
+  const category = categories.find((c) => c.id === item.categoryId);
 
   return (
     <View style={fc.card}>
@@ -157,22 +147,34 @@ const fc = StyleSheet.create({
 export default function FavouritesScreen() {
   const router = useRouter();
   const { addItem } = useCart();
+  const accessToken = useBistroStore((s) => s.accessToken);
   const [favourites, setFavourites] = useState<string[]>(DEFAULT_FAVOURITES);
+  const [loading, setLoading] = useState(true);
 
-  const handleRemove = (id: string) =>
+  // Load from DB on mount
+  useEffect(() => {
+    if (!accessToken) { setLoading(false); return; }
+    fetchFavourites(accessToken).then((ids) => {
+      if (ids && ids.length > 0) setFavourites(ids);
+      setLoading(false);
+    });
+  }, [accessToken]);
+
+  const handleRemove = useCallback(async (id: string) => {
     setFavourites((prev) => prev.filter((f) => f !== id));
+    if (accessToken) await removeFavourite(id, accessToken);
+  }, [accessToken]);
 
-  const handleAdd = (menuItemId: string) => {
-    const item = MENU_ITEM_MAP.get(menuItemId);
+  const handleAdd = useCallback((menuItemId: string) => {
+    const item = useBistroStore.getState().menuItemMap.get(menuItemId);
     if (!item) return;
-    // Quick-add with defaults; navigate to detail if required customizations
     const hasRequired = item.customizationGroups.some((g) => g.minSelections > 0);
     if (hasRequired) {
       router.push(`/item/${menuItemId}` as any);
     } else {
       addItem(menuItemId, 1, []);
     }
-  };
+  }, [addItem, router]);
 
   return (
     <SafeAreaView style={s.root} edges={["top"]}>
@@ -185,7 +187,11 @@ export default function FavouritesScreen() {
         <View style={{ width: 38 }} />
       </View>
 
-      {favourites.length === 0 ? (
+      {loading ? (
+        <View style={s.empty}>
+          <ActivityIndicator size="large" color={Colors.brand.primary} />
+        </View>
+      ) : favourites.length === 0 ? (
         <View style={s.empty}>
           <Text style={s.emptyEmoji}>🤍</Text>
           <Text style={s.emptyTitle}>No favourites yet</Text>

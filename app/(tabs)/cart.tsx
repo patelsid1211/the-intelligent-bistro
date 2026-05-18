@@ -25,10 +25,14 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import CartLineItem from "@/components/CartLineItem";
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
 import { TAB_BAR_HEIGHT } from "@/constants/layout";
-import { computePromoDiscount, THE_BISTRO, validatePromoCode } from "@/data/menu";
-import { useCart } from "@/store";
+import { useBistroStore, useCart } from "@/store";
+import { placeOrder } from "@/store/apiClient";
 import { formatPrice } from "@/utils/format";
 import type { TipPreset } from "@shared/types";
+
+// Delivery time constant — used in cart display
+const DELIVERY_TIME = "15-25 min";
+const RESTAURANT_NAME = "The Intelligent Bistro";
 
 const TIP_PRESETS: { label: string; sublabel: string; value: TipPreset }[] = [
   { label: "No tip", sublabel: "", value: 0 as any },
@@ -233,16 +237,27 @@ function PromoInput({ appliedCode, subtotal, onApply, onRemove }: PromoInputProp
   const handleApply = useCallback(async () => {
     if (!code.trim()) return;
     setLoading(true); setError(null);
-    await new Promise((r) => setTimeout(r, 400));
-    const promo = validatePromoCode(code.trim());
-    setLoading(false);
-    if (!promo) { setError("Invalid or expired promo code."); return; }
-    if (subtotal < promo.minimumOrderAmount) {
-      setError(`Minimum order of ${formatPrice(promo.minimumOrderAmount)} required.`);
-      return;
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001"}/api/promo/validate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: code.trim(), subtotalCents: subtotal }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error?.message ?? "Invalid or expired promo code.");
+      } else {
+        onApply(code.trim().toUpperCase(), data.data.discountCents);
+        setCode("");
+      }
+    } catch {
+      setError("Could not validate code. Check your connection.");
+    } finally {
+      setLoading(false);
     }
-    onApply(promo.code, computePromoDiscount(promo, subtotal));
-    setCode("");
   }, [code, subtotal, onApply]);
 
   if (appliedCode) {
@@ -433,36 +448,43 @@ const pricingStyles = StyleSheet.create({
 export default function CartScreen() {
   const router = useRouter();
   const { cart, pricing, recentlyUpdatedLineItemIds, updateQuantity, removeItem, setTip, applyPromo, removePromo, clearCart } = useCart();
+  const accessToken = useBistroStore((s) => s.accessToken);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const insets = useSafeAreaInsets();
 
-  // Height the checkout button needs to clear: tab bar + device home indicator
   const checkoutBottomPad = TAB_BAR_HEIGHT + Math.max(insets.bottom - 20, 0);
 
   const handleCheckout = useCallback(async () => {
     if (cart.items.length === 0) return;
     setIsCheckingOut(true);
 
-    // Simulate API call — place the order
-    await new Promise((r) => setTimeout(r, 1200));
-
-    const orderId = `#${Math.floor(100000 + Math.random() * 900000)}`;
+    let orderId = `#${Math.floor(100000 + Math.random() * 900000)}`;
     const total = pricing.total;
 
-    // Clear cart before navigating so back button doesn't show stale cart
+    try {
+      if (accessToken) {
+        const res = await placeOrder({
+          items: cart.items,
+          pricing,
+          promoCode: cart.promoCode,
+          tipAmount: cart.tipAmount,
+        }, accessToken);
+        if (res?.success) {
+          orderId = `#${(res.data as any).id?.slice(0, 8).toUpperCase() ?? orderId.slice(1)}`;
+        }
+      }
+    } catch {
+      // silently fall back to local order ID
+    }
+
     clearCart();
     setIsCheckingOut(false);
 
-    // Navigate to success screen with order details
     router.replace({
       pathname: "/order-success",
-      params: {
-        total: String(total),
-        orderId,
-        deliveryTime: THE_BISTRO.deliveryTimeRange,
-      },
+      params: { total: String(total), orderId, deliveryTime: DELIVERY_TIME },
     });
-  }, [cart.items.length, pricing.total, clearCart, router]);
+  }, [cart, pricing, accessToken, clearCart, router]);
 
   const isEmpty = cart.items.length === 0;
 
@@ -476,7 +498,7 @@ export default function CartScreen() {
           <Text style={styles.headerTitle}>Your Cart</Text>
           {!isEmpty && (
             <Text style={styles.headerSub}>
-              {cart.items.reduce((s, i) => s + i.quantity, 0)} items · {THE_BISTRO.name}
+              {cart.items.reduce((s, i) => s + i.quantity, 0)} items · {RESTAURANT_NAME}
             </Text>
           )}
         </View>
@@ -524,7 +546,7 @@ export default function CartScreen() {
                   tintColor={Colors.brand.primary}
                   size={16}
                 />
-                <Text style={styles.itemsHeaderText}>{THE_BISTRO.name}</Text>
+                <Text style={styles.itemsHeaderText}>{RESTAURANT_NAME}</Text>
               </View>
               {cart.items.map((item) => (
                 <CartLineItem
@@ -575,7 +597,7 @@ export default function CartScreen() {
                 size={14}
               />
               <Text style={styles.deliveryText}>
-                Estimated delivery: {THE_BISTRO.deliveryTimeRange}
+                Estimated delivery: {DELIVERY_TIME}
               </Text>
             </View>
 

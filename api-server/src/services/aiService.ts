@@ -522,11 +522,11 @@ function localMockEngine(
   if (lower.includes("clear") || lower.includes("start over") || lower.includes("remove everything")) {
     return { action: "CART_CLEAR", aiNarration: "Done! Cart cleared. What would you like to order?" };
   }
-  if (lower.includes("my cart") || lower.includes("checkout") || lower.includes("show cart")) {
+  if (lower.includes("my cart") || lower.includes("checkout") || lower.includes("show cart") || lower.includes("order summary") || lower.includes("show order") || lower.includes("place order") || lower.includes("confirm order")) {
     return {
       action: "NAVIGATE", navigateTo: "cart",
       aiNarration: cartItemCount > 0
-        ? `You have ${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} in your cart. Taking you there now! 🛒`
+        ? `Here's your order summary! You have ${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} in your cart. Ready to place your order? 🛒`
         : "Your cart is empty. Want me to add something first?",
     };
   }
@@ -534,8 +534,59 @@ function localMockEngine(
     return { action: "NAVIGATE", navigateTo: "home", aiNarration: "Taking you to the menu! 🍽️" };
   }
 
+  // ── Multi-item orders (e.g. "two spicy chicken sandwiches and a large water") ──
+  const hasAnd = lower.includes(" and ");
+  if (hasAnd) {
+    const parts = lower.split(/\s+and\s+/);
+    const cartItems: Array<{ menuItemId: string; quantity: number; selectedCustomizations: Record<string, string> }> = [];
+    const names: string[] = [];
+
+    for (const part of parts) {
+      const q = parseQuantity(part);
+      if (part.includes("spicy crispy") || part.includes("crispy chicken") || part.includes("spicy chicken")) {
+        const spice = part.includes("extra hot") ? "spice-extra-hot" : part.includes("hot") ? "spice-hot" : part.includes("mild") ? "spice-mild" : "spice-medium";
+        cartItems.push({ menuItemId: "burger-03", quantity: q, selectedCustomizations: { "spice-level": spice, "side-choice": "side-fries" } });
+        names.push(`${q > 1 ? q + "× " : ""}Spicy Crispy Chicken`);
+      } else if (part.includes("water") && !part.includes("sparkling")) {
+        cartItems.push({ menuItemId: "drink-05", quantity: q, selectedCustomizations: {} });
+        names.push(`${q > 1 ? q + "× " : ""}Still Water`);
+      } else if (part.includes("sparkling")) {
+        cartItems.push({ menuItemId: "drink-03", quantity: q, selectedCustomizations: {} });
+        names.push(`${q > 1 ? q + "× " : ""}Sparkling Water`);
+      } else if (part.includes("lemonade")) {
+        cartItems.push({ menuItemId: "drink-01", quantity: q, selectedCustomizations: { "drink-size": part.includes("large") ? "drink-lg" : "drink-md", "lemonade-flavor": "lf-classic" } });
+        names.push(`${q > 1 ? q + "× " : ""}Craft Lemonade`);
+      } else if (part.includes("matcha")) {
+        cartItems.push({ menuItemId: "drink-02", quantity: q, selectedCustomizations: { "drink-size": part.includes("large") ? "drink-lg" : "drink-md", "latte-temp": "temp-hot", "latte-milk": "milk-oat" } });
+        names.push(`${q > 1 ? q + "× " : ""}Matcha Latte`);
+      } else if (part.includes("dragon roll")) {
+        cartItems.push({ menuItemId: "sushi-01", quantity: q, selectedCustomizations: {} });
+        names.push(`${q > 1 ? q + "× " : ""}Dragon Roll`);
+      } else if (part.includes("margherita")) {
+        cartItems.push({ menuItemId: "pizza-01", quantity: q, selectedCustomizations: { "pizza-size": "pizza-10", "pizza-crust": "crust-hand" } });
+        names.push(`${q > 1 ? q + "× " : ""}Margherita`);
+      } else if (part.includes("bistro classic") || (part.includes("burger") && !part.includes("bbq"))) {
+        cartItems.push({ menuItemId: "burger-01", quantity: q, selectedCustomizations: { "burger-patty": "patty-single", "burger-cheese": "cheese-american", "burger-sauce": "sauce-bistro", "side-choice": "side-fries" } });
+        names.push(`${q > 1 ? q + "× " : ""}Bistro Classic`);
+      } else if (part.includes("cold brew")) {
+        cartItems.push({ menuItemId: "drink-06", quantity: q, selectedCustomizations: { "cold-brew-milk": "cb-black" } });
+        names.push(`${q > 1 ? q + "× " : ""}Cold Brew`);
+      } else if (part.includes("energy")) {
+        cartItems.push({ menuItemId: "drink-07", quantity: q, selectedCustomizations: { "energy-flavor": "ef-citrus" } });
+        names.push(`${q > 1 ? q + "× " : ""}Energy Boost`);
+      }
+    }
+
+    if (cartItems.length > 1) {
+      return {
+        action: "CART_ADD",
+        updatedCartItems: cartItems,
+        aiNarration: `Added ${names.join(" and ")} to your cart! 🛒`,
+      };
+    }
+  }
+
   // ── Category browsing → SHOW_OPTIONS ────────────────────────────────────────
-  // Only show options if user is browsing a category, not ordering a specific item
   const isSpecific = /margherita|diavola|truffle funghi|bbq chicken|vegan garden|dragon roll|rainbow|spicy tuna|salmon sashimi|veggie avocado|bistro classic|truffle mushroom|spicy crispy|garden smash|bbq bacon|carne asada|baja fish|al pastor|roasted veggie|cacio|lobster|bolognese|pesto|bistro caesar|harvest kale|poke bowl|korean bbq|mediterranean|teriyaki salmon|lava cake|cheesecake|tiramisu|matcha|lemonade/.test(lower);
 
   if (!isSpecific) {
@@ -633,6 +684,21 @@ function localMockEngine(
   }
   if (lower.includes("lemonade")) {
     return { action: "CART_ADD", updatedCartItems: [{ menuItemId: "drink-01", quantity: qty, selectedCustomizations: { "drink-size": "drink-md", "lemonade-flavor": "lf-classic" } }], aiNarration: `Added ${qty > 1 ? qty + "x " : ""}Medium Craft Lemonade! 🍋` };
+  }
+  if (lower.includes("water") && !lower.includes("sparkling")) {
+    return { action: "CART_ADD", updatedCartItems: [{ menuItemId: "drink-05", quantity: qty, selectedCustomizations: {} }], aiNarration: `Added ${qty > 1 ? qty + "x " : ""}Still Water! 💧` };
+  }
+  if (lower.includes("sparkling water") || lower.includes("sparkling")) {
+    return { action: "CART_ADD", updatedCartItems: [{ menuItemId: "drink-03", quantity: qty, selectedCustomizations: {} }], aiNarration: `Added ${qty > 1 ? qty + "x " : ""}Sparkling Water! 💧` };
+  }
+  if (lower.includes("cold brew") || lower.includes("cold coffee")) {
+    return { action: "CART_ADD", updatedCartItems: [{ menuItemId: "drink-06", quantity: qty, selectedCustomizations: { "cold-brew-milk": "cb-black" } }], aiNarration: `Added ${qty > 1 ? qty + "x " : ""}Cold Brew Coffee! ☕` };
+  }
+  if (lower.includes("energy drink") || lower.includes("energy boost")) {
+    return { action: "CART_ADD", updatedCartItems: [{ menuItemId: "drink-07", quantity: qty, selectedCustomizations: { "energy-flavor": "ef-citrus" } }], aiNarration: `Added ${qty > 1 ? qty + "x " : ""}Energy Boost! ⚡` };
+  }
+  if (lower.includes("lassi") || lower.includes("mango lassi")) {
+    return { action: "CART_ADD", updatedCartItems: [{ menuItemId: "drink-08", quantity: qty, selectedCustomizations: { "drink-size": "drink-md" } }], aiNarration: `Added ${qty > 1 ? qty + "x " : ""}Mango Lassi! 🥭` };
   }
 
   // ── Recommendations ──────────────────────────────────────────────────────────

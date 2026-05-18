@@ -4,7 +4,7 @@
  */
 
 import { Colors, Radius, Spacing, Typography } from "@/constants/Theme";
-import { MENU_ITEM_MAP } from "@/data/menu";
+import { useBistroStore } from "@/store";
 import type { CartItem } from "@shared/types";
 import { useEffect, useRef } from "react";
 import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -27,7 +27,7 @@ export default function CartLineItem({
   onRemove,
 }: CartLineItemProps) {
   const highlightAnim = useRef(new Animated.Value(0)).current;
-  const menuItem = MENU_ITEM_MAP.get(item.menuItemId);
+  const menuItem = useBistroStore.getState().menuItemMap.get(item.menuItemId);
 
   useEffect(() => {
     if (isHighlighted) {

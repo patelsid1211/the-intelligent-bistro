@@ -26,8 +26,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
-import { MENU_ITEM_MAP } from "@/data/menu";
-import { useCart } from "@/store";
+import { useCart, useMenu } from "@/store";
 import type { CustomizationGroup, SelectedCustomization } from "@shared/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,8 +341,9 @@ export default function ItemDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { addItem } = useCart();
+  const { menuItemMap } = useMenu();
 
-  const item = MENU_ITEM_MAP.get(id ?? "");
+  const item = menuItemMap.get(id ?? "");
 
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState("");

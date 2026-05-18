@@ -5,10 +5,12 @@
 
 import BackButton from "@/components/BackButton";
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
+import { useBistroStore } from "@/store";
+import { fetchNotificationPrefs, updateNotificationPrefs } from "@/store/apiClient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     Alert,
     ScrollView,
@@ -145,19 +147,31 @@ const sec = StyleSheet.create({
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const accessToken = useBistroStore((s) => s.accessToken);
 
-  // Notification toggles
   const [pushEnabled, setPushEnabled] = useState(true);
   const [orderUpdates, setOrderUpdates] = useState(true);
   const [promoAlerts, setPromoAlerts] = useState(true);
   const [emailDigest, setEmailDigest] = useState(false);
-
-  // Privacy toggles
   const [locationEnabled, setLocationEnabled] = useState(true);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
-
-  // Appearance
   const [darkMode, setDarkMode] = useState(false);
+
+  // Load prefs from DB
+  useEffect(() => {
+    if (!accessToken) return;
+    fetchNotificationPrefs(accessToken).then((prefs) => {
+      if (!prefs) return;
+      setPushEnabled(prefs.pushNotifications ?? true);
+      setOrderUpdates(prefs.orderUpdates ?? true);
+      setPromoAlerts(prefs.promotions ?? true);
+      setEmailDigest(prefs.emailNotifications ?? false);
+    });
+  }, [accessToken]);
+
+  const savePrefs = useCallback((patch: object) => {
+    if (accessToken) updateNotificationPrefs(patch, accessToken);
+  }, [accessToken]);
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -195,25 +209,25 @@ export default function SettingsScreen() {
             icon="bell.fill" iconColor="#F59E0B"
             label="Push Notifications"
             sublabel="Receive alerts on your device"
-            isToggle toggleValue={pushEnabled} onToggle={setPushEnabled}
+            isToggle toggleValue={pushEnabled} onToggle={(v) => { setPushEnabled(v); savePrefs({ pushNotifications: v }); }}
           />
           <SettingRow
             icon="bag.fill" iconColor="#3B82F6"
             label="Order Updates"
             sublabel="Status changes, delivery alerts"
-            isToggle toggleValue={orderUpdates} onToggle={setOrderUpdates}
+            isToggle toggleValue={orderUpdates} onToggle={(v) => { setOrderUpdates(v); savePrefs({ orderUpdates: v }); }}
           />
           <SettingRow
             icon="tag.fill" iconColor="#F97316"
             label="Promo Alerts"
             sublabel="Deals, discounts, new offers"
-            isToggle toggleValue={promoAlerts} onToggle={setPromoAlerts}
+            isToggle toggleValue={promoAlerts} onToggle={(v) => { setPromoAlerts(v); savePrefs({ promotions: v }); }}
           />
           <SettingRow
             icon="envelope.fill" iconColor="#6366F1"
             label="Email Digest"
             sublabel="Weekly summary of your orders"
-            isToggle toggleValue={emailDigest} onToggle={setEmailDigest}
+            isToggle toggleValue={emailDigest} onToggle={(v) => { setEmailDigest(v); savePrefs({ emailNotifications: v }); }}
             isLast
           />
         </Section>

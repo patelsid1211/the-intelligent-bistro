@@ -25,11 +25,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import MenuItemCard from "@/components/MenuItemCard";
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
-import { THE_BISTRO, getItemsByCategory } from "@/data/menu";
 import { RESTAURANTS } from "@/data/restaurants";
-import { useAuth, useCart, useCartItemCount, useUI } from "@/store";
+import { useAuth, useCart, useCartItemCount, useMenu, useUI } from "@/store";
 import { formatPrice } from "@/utils/format";
 import type { MenuItem } from "@shared/types";
+
+const DELIVER_ADDRESS = "123 Market St, San Francisco";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -192,10 +193,13 @@ export default function HomeScreen() {
   const { addItem } = useCart();
   const cartCount = useCartItemCount();
   const { activeCategoryId, setActiveCategory } = useUI();
+  const { categories, menuItems } = useMenu();
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
 
-  const activeItems = getItemsByCategory(activeCategoryId);
+  const activeItems = menuItems.filter((m) =>
+    m.categoryId === activeCategoryId && m.isAvailable
+  );
   const firstName = user?.displayName?.split(" ")[0] ?? "there";
 
   const handleQuickAdd = useCallback((item: MenuItem) => {
@@ -237,7 +241,7 @@ export default function HomeScreen() {
             <Text style={styles.deliverLabel}>DELIVER TO</Text>
             <TouchableOpacity style={styles.deliverRow}>
               <Text style={styles.deliverAddress} numberOfLines={1}>
-                {THE_BISTRO.address.split(",")[0]}
+                {DELIVER_ADDRESS.split(",")[0]}
               </Text>
               <Text style={styles.deliverChevron}> ▾</Text>
             </TouchableOpacity>
@@ -288,7 +292,7 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryScroll}
         >
-          {THE_BISTRO.categories
+          {categories
             .sort((a, b) => a.sortOrder - b.sortOrder)
             .map((cat) => (
               <CategoryCard
@@ -325,7 +329,7 @@ export default function HomeScreen() {
         {/* ── Popular Items section ── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
-            {THE_BISTRO.categories.find((c) => c.id === activeCategoryId)?.label ?? "Popular"}
+            {categories.find((c) => c.id === activeCategoryId)?.label ?? "Popular"}
           </Text>
           <Text style={styles.seeAll}>{activeItems.length} items</Text>
         </View>

@@ -5,7 +5,6 @@
 
 import BackButton from "@/components/BackButton";
 import { Colors, Radius, Shadow, Spacing, Typography } from "@/constants/Theme";
-import { validatePromoCode } from "@/data/menu";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
@@ -49,31 +48,46 @@ export default function PromosScreen() {
     setLoading(true); setError(null); setSuccess(null);
     await new Promise((r) => setTimeout(r, 600));
 
-    const promo = validatePromoCode(trimmed);
-    if (!promo) {
-      setError("Invalid or expired promo code.");
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001"}/api/promo/validate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: trimmed, subtotalCents: 0 }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) {
+        setError("Invalid or expired promo code.");
+        setLoading(false);
+        return;
+      }
+      const promo = data.data;
+      const discountStr = promo.type === "percentage"
+        ? `${promo.value}% off`
+        : promo.type === "flat"
+        ? `$${(promo.value / 100).toFixed(2)} off`
+        : promo.type === "free_delivery"
+        ? "Free delivery"
+        : `${promo.value}% off`;
+
+      setPromos((prev) => [...prev, {
+        code: trimmed,
+        description: promo.description ?? "",
+        discount: discountStr,
+        expiresAt: promo.expiresAt
+          ? new Date(promo.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : "No expiry",
+        isExpired: false,
+      }]);
+      setSuccess(`"${trimmed}" applied! ${promo.description ?? ""}`);
+      setCode("");
+    } catch {
+      setError("Could not validate code. Check your connection.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const discountStr = promo.type === "percentage"
-      ? `${promo.value}% off`
-      : promo.type === "flat"
-      ? `$${(promo.value / 100).toFixed(2)} off`
-      : promo.type === "free_delivery"
-      ? "Free delivery"
-      : `${promo.value}% off`;
-
-    setPromos((prev) => [...prev, {
-      code: promo.code,
-      description: promo.description,
-      discount: discountStr,
-      expiresAt: new Date(promo.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      isExpired: false,
-    }]);
-    setSuccess(`"${promo.code}" applied! ${promo.description}`);
-    setCode("");
-    setLoading(false);
   };
 
   const handleRemove = (promoCode: string) => {

@@ -542,9 +542,17 @@ export default function ProfileScreen() {
 
   const handleSaveProfile = useCallback(async (displayName: string, phone: string) => {
     if (!user || !accessToken) return;
-    // Update local store immediately (optimistic)
-    setAuth({ ...user, displayName, phone: phone || undefined }, accessToken);
-    // TODO: persist to API when PATCH /api/auth/profile is added
+    const res = await fetch(`${API_URL}/api/auth/profile`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ displayName, phone: phone || null }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      setAuth({ ...user, displayName: json.data.displayName, phone: json.data.phone }, accessToken);
+    } else {
+      throw new Error(json.error?.message ?? "Failed to save profile.");
+    }
   }, [user, accessToken, setAuth]);
 
   // ── Sign out ────────────────────────────────────────────────────────────────
