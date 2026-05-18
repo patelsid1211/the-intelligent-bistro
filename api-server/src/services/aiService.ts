@@ -11,13 +11,13 @@
  */
 
 import type { FunctionDeclaration, Tool } from "@google/generative-ai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import OpenAI from "openai";
 import type {
-    AIAction,
-    AIOrderRequest,
-    AIOrderResponse,
-    NavigationTarget,
+  AIAction,
+  AIOrderRequest,
+  AIOrderResponse,
+  NavigationTarget,
 } from "../../../shared/types.js";
 import { THE_BISTRO } from "../data/menuData.js";
 
@@ -281,27 +281,28 @@ const GEMINI_FUNCTIONS: FunctionDeclaration[] = [
     name: "CART_ADD",
     description: "Add one or more menu items to the cart.",
     parameters: {
-      type: "object",
+      type: SchemaType.OBJECT,
       required: ["updatedCartItems", "aiNarration"],
       properties: {
         updatedCartItems: {
-          type: "array",
+          type: SchemaType.ARRAY,
           description: "Items to add.",
           items: {
-            type: "object",
+            type: SchemaType.OBJECT,
             required: ["menuItemId", "quantity", "selectedCustomizations"],
             properties: {
-              menuItemId: { type: "string" },
-              quantity: { type: "integer" },
+              menuItemId: { type: SchemaType.STRING },
+              quantity: { type: SchemaType.INTEGER },
               selectedCustomizations: {
-                type: "object",
+                type: SchemaType.OBJECT,
                 description: "Map of customizationGroupId to optionId.",
+                properties: {},
               },
-              specialInstructions: { type: "string" },
+              specialInstructions: { type: SchemaType.STRING },
             },
           },
         },
-        aiNarration: { type: "string" },
+        aiNarration: { type: SchemaType.STRING },
       },
     },
   },
@@ -309,11 +310,11 @@ const GEMINI_FUNCTIONS: FunctionDeclaration[] = [
     name: "CART_REMOVE",
     description: "Remove specific line items from the cart.",
     parameters: {
-      type: "object",
+      type: SchemaType.OBJECT,
       required: ["removeLineItemIds", "aiNarration"],
       properties: {
-        removeLineItemIds: { type: "array", items: { type: "string" } },
-        aiNarration: { type: "string" },
+        removeLineItemIds: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+        aiNarration: { type: SchemaType.STRING },
       },
     },
   },
@@ -321,21 +322,21 @@ const GEMINI_FUNCTIONS: FunctionDeclaration[] = [
     name: "CART_CLEAR",
     description: "Clear all items from the cart.",
     parameters: {
-      type: "object",
+      type: SchemaType.OBJECT,
       required: ["aiNarration"],
-      properties: { aiNarration: { type: "string" } },
+      properties: { aiNarration: { type: SchemaType.STRING } },
     },
   },
   {
     name: "NAVIGATE",
     description: "Navigate the user to a different screen.",
     parameters: {
-      type: "object",
+      type: SchemaType.OBJECT,
       required: ["navigateTo", "aiNarration"],
       properties: {
-        navigateTo: { type: "string" },
-        navigateItemId: { type: "string" },
-        aiNarration: { type: "string" },
+        navigateTo: { type: SchemaType.STRING },
+        navigateItemId: { type: SchemaType.STRING },
+        aiNarration: { type: SchemaType.STRING },
       },
     },
   },
@@ -343,18 +344,18 @@ const GEMINI_FUNCTIONS: FunctionDeclaration[] = [
     name: "SHOW_OPTIONS",
     description: "Show the user a list of available menu items when they mention a category.",
     parameters: {
-      type: "object",
+      type: SchemaType.OBJECT,
       required: ["menuOptions", "aiNarration", "optionCategory"],
       properties: {
         menuOptions: {
-          type: "array",
+          type: SchemaType.ARRAY,
           items: {
-            type: "object",
-            properties: { menuItemId: { type: "string" } },
+            type: SchemaType.OBJECT,
+            properties: { menuItemId: { type: SchemaType.STRING } },
           },
         },
-        optionCategory: { type: "string" },
-        aiNarration: { type: "string" },
+        optionCategory: { type: SchemaType.STRING },
+        aiNarration: { type: SchemaType.STRING },
       },
     },
   },
@@ -362,12 +363,12 @@ const GEMINI_FUNCTIONS: FunctionDeclaration[] = [
     name: "CLARIFY",
     description: "Ask for clarification or provide information without modifying the cart.",
     parameters: {
-      type: "object",
+      type: SchemaType.OBJECT,
       required: ["aiNarration"],
       properties: {
-        aiNarration: { type: "string" },
-        requiresClarification: { type: "boolean" },
-        clarificationPrompt: { type: "string" },
+        aiNarration: { type: SchemaType.STRING },
+        requiresClarification: { type: SchemaType.BOOLEAN },
+        clarificationPrompt: { type: SchemaType.STRING },
       },
     },
   },

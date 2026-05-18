@@ -51,20 +51,21 @@ export function getAllProducts(req: Request, res: Response): void {
 }
 
 export function getProductById(req: Request, res: Response): void {
-  const row = queryOne<DbProduct>("SELECT * FROM products WHERE id=?", [req.params.id]);
+  const row = queryOne<DbProduct>("SELECT * FROM products WHERE id=?", [String(req.params.id)]);
   if (!row) { res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Product not found." } }); return; }
   res.json({ success: true, data: formatProduct(row) });
 }
 
 export function getProductsByCategory(req: Request, res: Response): void {
   const { page, limit, offset } = pageParams(req);
+  const categoryId = String(req.params.categoryId);
   const rows = query<DbProduct>(
     "SELECT * FROM products WHERE category_id=? AND is_available=1 ORDER BY rating DESC LIMIT ? OFFSET ?",
-    [req.params.categoryId, limit, offset]
+    [categoryId, limit, offset]
   );
   const [{ total }] = query<{ total: number }>(
     "SELECT COUNT(*) as total FROM products WHERE category_id=? AND is_available=1",
-    [req.params.categoryId]
+    [categoryId]
   );
   res.json({ success: true, data: { products: rows.map(formatProduct), total, page, limit } });
 }

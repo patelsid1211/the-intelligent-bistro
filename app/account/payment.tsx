@@ -11,17 +11,17 @@ import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -478,9 +478,8 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        <TouchableOpacity style={s.addBtn} onPress={openAdd}>
-          <SymbolView name={{ ios: "plus.circle.fill", android: "add_circle", web: "add_circle" }} tintColor={Colors.brand.primary} size={22} />
-          <Text style={s.addBtnText}>Add New Card</Text>
+        <TouchableOpacity style={s.mainAddBtn} onPress={openAdd}>
+          <Text style={s.mainAddBtnText}>ADD NEW CARD</Text>
         </TouchableOpacity>
 
         <Text style={s.secure}>🔒 Payments are encrypted and processed securely.</Text>
@@ -672,7 +671,30 @@ const s = StyleSheet.create({
   fieldRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.base, paddingVertical: Spacing.md, gap: Spacing.md },
   fieldRowError: { backgroundColor: "#FEF2F2" },
 
-  // Add button — full width orange
+  // Add button — full width orange (main screen)
+  mainAddBtn: {
+    height: 56,
+    backgroundColor: Colors.brand.primary,
+    borderRadius: Radius.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: Spacing.lg,
+    shadowColor: Colors.brand.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  mainAddBtnText: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.heavy,
+    color: Colors.neutral.white,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+
+  // Add button — modal (absolute positioned)
   addBtn: {
     position: "absolute",
     bottom: 0, left: 0, right: 0,

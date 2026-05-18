@@ -8,6 +8,7 @@
  * Single source of truth — used by both ai-chat.tsx and AIBubble.tsx.
  */
 
+import { THE_BISTRO } from "@/data/menu";
 import type { AIOrderResponse } from "@shared/types";
 
 // ─────────────────────────────────────────────────────────────────────────────

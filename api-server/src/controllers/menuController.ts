@@ -7,11 +7,11 @@
 import type { Request, Response } from "express";
 import type { ApiResponse } from "../../../shared/types.js";
 import {
-    MENU_ITEM_MAP,
-    THE_BISTRO,
-    getFeaturedItems,
-    getItemsByCategory,
-    getPopularItems,
+  MENU_ITEM_MAP,
+  THE_BISTRO,
+  getFeaturedItems,
+  getItemsByCategory,
+  getPopularItems,
 } from "../data/menuData.js";
 
 export function getMenu(req: Request, res: Response): void {
@@ -22,7 +22,7 @@ export function getMenu(req: Request, res: Response): void {
 }
 
 export function getMenuItem(req: Request, res: Response): void {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const item = MENU_ITEM_MAP.get(id);
 
   if (!item) {
@@ -37,7 +37,7 @@ export function getMenuItem(req: Request, res: Response): void {
 }
 
 export function getMenuByCategory(req: Request, res: Response): void {
-  const { categoryId } = req.params;
+  const categoryId = String(req.params.categoryId);
   const items = getItemsByCategory(categoryId);
   res.json({ success: true, data: items });
 }

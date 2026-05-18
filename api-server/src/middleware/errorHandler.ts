@@ -7,7 +7,7 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 /** Wraps an async route handler and forwards thrown errors to next(). */
 export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void> | void
 ): RequestHandler {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);

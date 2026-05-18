@@ -151,16 +151,16 @@ export function getOrderById(req: Request, res: Response): void {
   const userId = getUserId(req);
   if (!userId) { res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } }); return; }
 
-  const order = queryOne<DbOrder>("SELECT * FROM orders WHERE id=? AND user_id=?", [req.params.id, userId]);
+  const order = queryOne<DbOrder>("SELECT * FROM orders WHERE id=? AND user_id=?", [String(req.params.id), userId]);
   if (!order) { res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Order not found." } }); return; }
 
-  const history = query("SELECT * FROM order_status_history WHERE order_id=? ORDER BY created_at ASC", [req.params.id]);
+  const history = query("SELECT * FROM order_status_history WHERE order_id=? ORDER BY created_at ASC", [String(req.params.id)]);
   res.json({ success: true, data: { ...formatOrder(order), statusHistory: history } });
 }
 
 export function updateOrderStatus(req: Request, res: Response): void {
   const { status, message } = (req as Request & { parsed: z.infer<typeof UpdateStatusSchema> }).parsed;
-  const { id } = req.params;
+  const id = String(req.params.id);
 
   run("UPDATE orders SET status=?, updated_at=datetime('now') WHERE id=?", [status, id]);
   run(
