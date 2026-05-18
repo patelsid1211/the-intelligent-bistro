@@ -132,8 +132,10 @@ export function useAIChat(options: UseAIChatOptions = {}) {
         : [];
       const addOnSuggestions = addedIds.length > 0 ? getAddOnSuggestions(addedIds) : undefined;
 
-      // Detect order summary request
-      const isOrderSummary = response.action === "NAVIGATE" && response.navigateTo === "cart";
+      // Detect: "show my cart" → navigate to cart; "order summary" → show inline
+      const isCartNavigate = response.action === "NAVIGATE" && response.navigateTo === "cart";
+      const isInlineSummary = isCartNavigate && response.aiNarration.includes("order summary");
+      const shouldNavigateToCart = isCartNavigate && !isInlineSummary;
 
       addConversationTurn({
         role: "assistant",
@@ -142,14 +144,17 @@ export function useAIChat(options: UseAIChatOptions = {}) {
         menuOptions: response.action === "SHOW_OPTIONS" ? response.menuOptions : undefined,
         optionCategory: response.optionCategory,
         addOnSuggestions,
-        showOrderSummary: isOrderSummary,
+        showOrderSummary: isInlineSummary,
       });
 
       setProcessing(false);
       onResponse?.();
 
-      // Handle navigation — but NOT for cart (we show summary inline instead)
-      if (response.action === "NAVIGATE" && response.navigateTo && response.navigateTo !== "cart") {
+      // Handle navigation
+      if (shouldNavigateToCart) {
+        onNavigate?.();
+        setTimeout(() => router.push("/(tabs)/cart" as any), onNavigate ? 300 : 0);
+      } else if (response.action === "NAVIGATE" && response.navigateTo && response.navigateTo !== "cart") {
         const route =
           response.navigateTo === "item-detail" && response.navigateItemId
             ? `/item/${response.navigateItemId}`

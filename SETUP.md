@@ -120,14 +120,18 @@ Once the app opens:
 1. **Sign up** with any email and password (e.g. `test@test.com` / `password123`)
 2. **Home screen** — tap category badges to filter the menu
 3. **AI Chat** — tap the center `+` tab or the floating orange bubble, then try:
-   - `"I want pizza"` → shows all pizzas as cards
+   - `"I want pizza"` → shows all pizzas as interactive cards
    - `"Add two dragon rolls"` → adds directly to cart
    - `"Show me burgers"` → browse burger options
    - `"Add a spicy crispy chicken and a matcha latte"` → adds both items
+   - `"Add two spicy chicken sandwiches and a large water"` → multi-item order
    - `"What's popular?"` → top-rated recommendations
-   - `"Show my cart"` → navigates to cart
-4. **Restaurants** → tap "See All" on the home screen to browse all 10 restaurants
-5. **Cart** → tap the bag icon, try promo code `SAVE10`, then place an order
+   - `"show order summary"` → inline order summary with Place Order button
+   - `"place order"` / `"confirm order"` / `"checkout"` → same as above
+   - `"show my cart"` / `"show cart"` → inline order summary
+4. **After adding an item** → suggestion chips appear (Add Drink, Add Dessert, Order Summary)
+5. **Restaurants** → tap "See All" on the home screen to browse all 10 restaurants
+6. **Cart** → tap the bag icon, try promo code `SAVE10`, then place an order
 
 ---
 

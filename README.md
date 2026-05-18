@@ -67,10 +67,17 @@ The app **always works** — even with no API key, the built-in offline engine h
 "Add two dragon rolls"                      → adds 2× Dragon Roll to cart
 "Show me burgers"                           → browse all burger options
 "Add a spicy crispy chicken, extra hot"     → adds with correct spice level
+"Add two spicy chicken sandwiches and a large water" → multi-item order
 "What's popular?"                           → top-rated recommendations
 "Clear my cart"                             → cart cleared
-"Show my cart"                              → navigates to cart screen
+"show order summary"                        → inline order summary + Place Order button
+"place order" / "confirm order"             → same as above
+"show my cart" / "checkout"                 → inline order summary
 ```
+
+After adding any item, **suggestion chips** appear:
+- Category-specific add-ons (e.g. 🍟 Add Fries, 🥤 Add Drink, 🍰 Dessert)
+- 🛒 Order Summary — shows inline cart with "Place Order 🚀" button
 
 The AI uses **LLM function/tool calling** — it returns structured JSON, not free text:
 

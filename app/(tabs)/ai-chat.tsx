@@ -973,9 +973,63 @@ export default function AIChatScreen() {
   }, [router]);
 
   const handleKeepOrdering = useCallback(() => {
-    // Just focus the input
-    inputRef.current?.focus();
-  }, []);
+    // Show recommended add-on items as cards based on what's in the cart
+    const store = useBistroStore.getState();
+    const cartCategoryIds = new Set(
+      store.cart.items.map((item) => {
+        const menuItem = store.menuItemMap.get(item.menuItemId);
+        return menuItem?.categoryId ?? "";
+      })
+    );
+
+    // Recommend items from complementary categories
+    const complementary: Record<string, string[]> = {
+      burgers: ["drinks", "desserts"],
+      pizza: ["drinks", "salads", "desserts"],
+      sushi: ["drinks", "desserts"],
+      tacos: ["drinks", "desserts"],
+      bowls: ["drinks", "desserts"],
+      pasta: ["drinks", "salads"],
+      salads: ["drinks", "pasta"],
+      desserts: ["drinks"],
+      drinks: ["burgers", "pizza", "desserts"],
+    };
+
+    const suggestCategories = new Set<string>();
+    for (const catId of cartCategoryIds) {
+      const comps = complementary[catId] ?? ["drinks", "desserts"];
+      comps.forEach((c) => suggestCategories.add(c));
+    }
+
+    // Get top-rated items from suggested categories (max 5)
+    const suggestions = store.menuItems
+      .filter((m) => suggestCategories.has(m.categoryId) && m.isAvailable)
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 5);
+
+    if (suggestions.length > 0) {
+      const { addConversationTurn } = useBistroStore.getState();
+      addConversationTurn({
+        role: "assistant",
+        content: "Here are some great add-ons to go with your order! 🌟",
+        timestamp: Date.now(),
+        menuOptions: suggestions.map((item) => ({
+          menuItemId: item.id,
+          name: item.name,
+          description: item.description,
+          basePrice: item.basePrice,
+          imageUrl: item.imageUrl,
+          dietaryTags: item.dietaryTags as string[],
+          rating: item.rating,
+          hasCustomizations: item.customizationGroups.length > 0,
+        })),
+        optionCategory: "recommendations",
+      });
+      scrollToBottom();
+    } else {
+      sendMessage("What else do you recommend?");
+    }
+  }, [scrollToBottom, sendMessage]);
 
   const isEmpty = conversationHistory.length === 0;
 

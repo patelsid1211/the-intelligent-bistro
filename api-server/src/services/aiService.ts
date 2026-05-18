@@ -522,7 +522,15 @@ function localMockEngine(
   if (lower.includes("clear") || lower.includes("start over") || lower.includes("remove everything")) {
     return { action: "CART_CLEAR", aiNarration: "Done! Cart cleared. What would you like to order?" };
   }
-  if (lower.includes("my cart") || lower.includes("checkout") || lower.includes("show cart") || lower.includes("order summary") || lower.includes("show order") || lower.includes("place order") || lower.includes("confirm order")) {
+  if (lower.includes("my cart") || lower.includes("show cart") || lower.includes("go to cart")) {
+    return {
+      action: "NAVIGATE", navigateTo: "cart",
+      aiNarration: cartItemCount > 0
+        ? `You have ${cartItemCount} item${cartItemCount !== 1 ? "s" : ""} in your cart. Taking you there now! 🛒`
+        : "Your cart is empty. Want me to add something first?",
+    };
+  }
+  if (lower.includes("order summary") || lower.includes("show order") || lower.includes("place order") || lower.includes("confirm order") || lower.includes("checkout")) {
     return {
       action: "NAVIGATE", navigateTo: "cart",
       aiNarration: cartItemCount > 0

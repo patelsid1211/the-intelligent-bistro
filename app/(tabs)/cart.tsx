@@ -11,6 +11,7 @@ import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -28,7 +29,7 @@ import { TAB_BAR_HEIGHT } from "@/constants/layout";
 import { useBistroStore, useCart } from "@/store";
 import { placeOrder } from "@/store/apiClient";
 import { formatPrice } from "@/utils/format";
-import type { TipPreset } from "@shared/types";
+import type { CartItem, TipPreset } from "@shared/types";
 
 // Delivery time constant — used in cart display
 const DELIVERY_TIME = "15-25 min";
@@ -442,6 +443,139 @@ const pricingStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RECOMMENDED ADD-ONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMPLEMENTARY: Record<string, string[]> = {
+  burgers: ["drinks", "desserts"],
+  pizza: ["drinks", "salads", "desserts"],
+  sushi: ["drinks", "desserts"],
+  tacos: ["drinks", "desserts"],
+  bowls: ["drinks", "desserts"],
+  pasta: ["drinks", "salads"],
+  salads: ["drinks", "pasta"],
+  desserts: ["drinks"],
+  drinks: ["burgers", "desserts"],
+  deals: ["drinks", "desserts"],
+};
+
+function RecommendedSection({ cartItems }: { cartItems: CartItem[] }) {
+  const router = useRouter();
+  const { addItem } = useCart();
+  const menuItems = useBistroStore((s) => s.menuItems);
+  const menuItemMap = useBistroStore((s) => s.menuItemMap);
+
+  if (cartItems.length === 0) return null;
+
+  // Find categories in cart
+  const cartCategoryIds = new Set(
+    cartItems.map((item) => menuItemMap.get(item.menuItemId)?.categoryId ?? "")
+  );
+
+  // Get complementary categories
+  const suggestCategories = new Set<string>();
+  for (const catId of cartCategoryIds) {
+    (COMPLEMENTARY[catId] ?? ["drinks", "desserts"]).forEach((c) => suggestCategories.add(c));
+  }
+  // Remove categories already in cart
+  for (const catId of cartCategoryIds) suggestCategories.delete(catId);
+
+  // Get top items from suggested categories
+  const recommendations = menuItems
+    .filter((m) => suggestCategories.has(m.categoryId) && m.isAvailable)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 6);
+
+  if (recommendations.length === 0) return null;
+
+  return (
+    <View style={recStyles.container}>
+      <Text style={recStyles.title}>You might also like</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={recStyles.list}>
+        {recommendations.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            style={recStyles.card}
+            onPress={() => {
+              if (item.customizationGroups.some((g) => g.minSelections > 0)) {
+                router.push(`/item/${item.id}` as any);
+              } else {
+                addItem(item.id, 1, []);
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <Image source={{ uri: item.imageUrl }} style={recStyles.image} resizeMode="cover" />
+            <View style={recStyles.info}>
+              <Text style={recStyles.name} numberOfLines={1}>{item.name}</Text>
+              <View style={recStyles.row}>
+                <Text style={recStyles.price}>{formatPrice(item.basePrice)}</Text>
+                <View style={recStyles.addBtn}>
+                  <Text style={recStyles.addBtnText}>+</Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+const recStyles = StyleSheet.create({
+  container: {
+    backgroundColor: Colors.neutral.white,
+    borderRadius: Radius.xl,
+    padding: Spacing.base,
+    ...Shadow.sm,
+  },
+  title: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.bold,
+    color: Colors.neutral.primary,
+    marginBottom: Spacing.md,
+  },
+  list: { gap: Spacing.sm },
+  card: {
+    width: 130,
+    backgroundColor: Colors.neutral.surface,
+    borderRadius: Radius.lg,
+    overflow: "hidden",
+  },
+  image: { width: 130, height: 85 },
+  info: { padding: Spacing.sm, gap: 4 },
+  name: {
+    fontSize: Typography.size.xs,
+    fontWeight: Typography.weight.bold,
+    color: Colors.neutral.primary,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  price: {
+    fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.heavy,
+    color: Colors.neutral.primary,
+  },
+  addBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addBtnText: {
+    fontSize: 16,
+    fontWeight: Typography.weight.bold,
+    color: Colors.neutral.white,
+    lineHeight: 18,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN CART SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -600,6 +734,9 @@ export default function CartScreen() {
                 Estimated delivery: {DELIVERY_TIME}
               </Text>
             </View>
+
+            {/* Recommended add-ons */}
+            <RecommendedSection cartItems={cart.items} />
 
             <View style={{ height: TAB_BAR_HEIGHT + 80 }} />
           </ScrollView>
