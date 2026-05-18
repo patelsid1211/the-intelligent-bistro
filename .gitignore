@@ -19,6 +19,7 @@ api-server/.env
 api-server/.env.example
 api-server/.env.local
 api-server/.env.production
+api-server/.env.example
 
 # ── Database files (auto-generated, not source) ───────────────
 api-server/bistro.db
