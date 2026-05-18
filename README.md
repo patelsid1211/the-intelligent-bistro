@@ -12,7 +12,7 @@
 |---|---|---|
 | Browse 50+ items across 10 categories | Natural language → structured cart actions | Full pricing breakdown, promo codes, order flow |
 
-> 📹 **[Watch the 5-minute Loom walkthrough](#)** ← *(add your Loom link here)*
+> 📹 **[Watch the 5-minute Loom walkthrough](#)** ← *([add your Loom link here](https://www.loom.com/share/d875d4cfab27429fada50e1997b5c415))*
 
 ---
 
