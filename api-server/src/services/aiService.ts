@@ -522,7 +522,7 @@ function localMockEngine(
   if (lower.includes("clear") || lower.includes("start over") || lower.includes("remove everything")) {
     return { action: "CART_CLEAR", aiNarration: "Done! Cart cleared. What would you like to order?" };
   }
-  if (lower.includes("my cart") || lower.includes("show cart") || lower.includes("go to cart")) {
+  if (lower.includes("my cart") || lower.includes("show cart") || lower.includes("go to cart") || lower.includes("open cart") || lower.includes("take me") || lower.includes("go cart") || lower.includes("view cart")) {
     return {
       action: "NAVIGATE", navigateTo: "cart",
       aiNarration: cartItemCount > 0

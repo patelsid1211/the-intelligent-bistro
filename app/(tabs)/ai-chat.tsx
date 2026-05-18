@@ -1133,12 +1133,12 @@ export default function AIChatScreen() {
             maxLength={300}
             returnKeyType="send"
             enablesReturnKeyAutomatically
-            onSubmitEditing={() => sendMessage(input)}
+            onSubmitEditing={() => handleSend(input)}
             blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!input.trim() || isProcessing) && styles.sendBtnOff]}
-            onPress={() => sendMessage(input)}
+            onPress={() => handleSend(input)}
             disabled={!input.trim() || isProcessing}
           >
             {isProcessing ? (
