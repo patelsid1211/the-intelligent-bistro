@@ -96,10 +96,7 @@ function RootLayoutNav() {
           <Stack.Screen
             name="item/[id]"
             options={{
-              headerShown: true,
-              headerTransparent: true,
-              headerTitle: "",
-              headerBackTitle: "Back",
+              headerShown: false,
               presentation: "card",
             }}
           />

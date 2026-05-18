@@ -7,14 +7,13 @@
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList, KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text, TextInput, TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text, TextInput, TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -537,11 +536,7 @@ export default function AuthScreen() {
   // ── RENDER ─────────────────────────────────────────────────────────────────
 
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
-    >
+    <View style={s.root}>
       <StatusBar style="light" />
 
       {/* Fixed dark header — always visible */}
@@ -565,6 +560,7 @@ export default function AuthScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         bounces={false}
+        automaticallyAdjustKeyboardInsets={true}
       >
           {/* ── White card ── */}
           <View style={s.card}>
@@ -764,7 +760,7 @@ export default function AuthScreen() {
 
       <CountryPicker visible={showPicker} selected={country}
         onSelect={setCountry} onClose={() => setShowPicker(false)} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -777,7 +773,7 @@ export default function AuthScreen() {
 const s = StyleSheet.create({
   // ── Root (KeyboardAvoidingView) ───────────────────────────────────────────
   root: { flex: 1, backgroundColor: Colors.auth.bg },
-  kavContainer: { flex: 1 },
+  kavContainer: { flex: 1, backgroundColor: Colors.neutral.white },
   scroll: { flexGrow: 1 },
 
   // ── Dark header — fixed at top ────────────────────────────────────────────
